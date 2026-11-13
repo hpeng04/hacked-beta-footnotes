@@ -6,8 +6,10 @@ import TimelineBar from "./components/TimelineBar.jsx";
 import SearchPanel from "./components/SearchPanel.jsx";
 
 export default function App() {
-  // "demo" is served from the backend's mock data and has no video file yet.
-  const [lecture, setLecture] = useState({ lecture_id: "demo", video_url: "" });
+  const [lecture, setLecture] = useState({
+    lecture_id: "demo",
+    video_url: "",
+  });
   const videoRef = useRef(null);
 
   const seek = (seconds) => {
@@ -18,14 +20,28 @@ export default function App() {
 
   return (
     <main>
-      <h1>LectureLens</h1>
-      <Upload onUploaded={setLecture} />
+      <header className="app-header">
+        <h1>TimeStamp</h1>
+        <Upload onUploaded={setLecture} />
+      </header>
+
       <div className="layout">
-        <section>
-          <VideoPlayer ref={videoRef} src={lecture.video_url && API_URL + lecture.video_url} />
-          <TimelineBar lectureId={lecture.lecture_id} onSeek={seek} />
+        <SearchPanel
+          key={lecture.lecture_id}
+          lectureId={lecture.lecture_id}
+          onSeek={seek}
+        />
+
+        <section className="lecture-pane">
+          {lecture.video_url ? (
+            <VideoPlayer ref={videoRef} src={API_URL + lecture.video_url} />
+          ) : (
+            <div className="video-empty">
+              <strong>No lecture video loaded</strong>
+              <span>Choose a file above to load a recording.</span>
+            </div>
+          )}
         </section>
-        <SearchPanel key={lecture.lecture_id} lectureId={lecture.lecture_id} onSeek={seek} />
       </div>
     </main>
   );
