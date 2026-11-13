@@ -88,8 +88,8 @@ ANSWER_PROMPT = """You answer questions about a lecture using only the transcrip
 Each excerpt is labelled with the time it starts, like (Excerpt at [1:35]).
 
 Rules:
-- Use only the excerpts. If they do not answer the question, say so in one sentence and cite nothing.
-- End every sentence with the label of the excerpt it comes from, in square brackets.
+- Use only the excerpts. If they do not answer the question, reply exactly: {not_covered}
+- End every sentence that uses an excerpt with that excerpt's label, in square brackets.
   Example: Deadlock needs four conditions [1:35].
 - Be brief: 1 to 4 sentences, plain text, no markdown.
 
@@ -98,6 +98,7 @@ Rules:
 Question: {question}
 Answer:"""
 
+NOT_COVERED = "The lecture does not cover that."
 MIN_GROUNDING_OVERLAP = 3  # shared content words before a citation is added or moved
 
 
@@ -108,6 +109,7 @@ def answer(question: str, sources: list[Chunk]) -> str:
     prompt = ANSWER_PROMPT.format(
         sources="\n\n".join(f"(Excerpt at [{fmt_time(c.start)}])\n{c.text}" for c in ordered),
         question=question,
+        not_covered=NOT_COVERED,
     )
     try:
         return _ground_citations(_normalize_citations(complete(prompt).strip()), ordered)
@@ -121,6 +123,7 @@ def _normalize_citations(text: str) -> str:
     return re.sub(r"[【(（]\s*((?:\d+:)?\d+:\d\d)\s*[】)）]", r"[\1]", text)
 
 
+REFUSAL = re.compile(r"\b(no|not|nothing|cannot|can't|unable|doesn't|don't|isn't|aren't|none)\b", re.I)
 CITATION = re.compile(r"\[((?:\d+:)?\d+:\d\d)\]")
 
 
@@ -133,8 +136,11 @@ def _ground_citations(reply: str, sources: list[Chunk]) -> str:
 
     Per sentence: no citation -> add the best-matching source (only if the reply cites
     nothing at all, so "the lecture doesn't cover X" stays uncited); citations that match
-    the sentence far worse than another source -> replace them with that source.
+    the sentence far worse than another source -> replace them with that source;
+    citations on a refusal sharing no words with any source -> removed.
     """
+    if reply.startswith(NOT_COVERED.rstrip(".")):
+        return NOT_COVERED
     by_time = {fmt_time(c.start): _content_words(c.text) for c in sources}
     cites_anything = bool(CITATION.search(reply))
     out = []
@@ -143,7 +149,9 @@ def _ground_citations(reply: str, sources: list[Chunk]) -> str:
         scores = {t: len(words & w) for t, w in by_time.items()}
         best = max(scores, key=scores.get)
         cited = CITATION.findall(sentence)
-        if scores[best] >= MIN_GROUNDING_OVERLAP:
+        if cited and scores[best] == 0 and REFUSAL.search(sentence):
+            sentence = re.sub(r"\s*" + CITATION.pattern, "", sentence)
+        elif scores[best] >= MIN_GROUNDING_OVERLAP:
             if not cited and not cites_anything:
                 sentence = re.sub(r"([.!?]?)$", rf" [{best}]\1", sentence, count=1)
             elif cited and 2 * max(scores.get(t, 0) for t in cited) < scores[best]:

@@ -134,7 +134,7 @@ def test_answer_normalizes_citations(fake_llm, raw, clean):
 def test_answer_prompt_says_cite_nothing_when_unanswerable(fake_llm):
     fake_llm.reply("groq", "x")
     llm.answer("q", SOURCES)
-    assert "cite nothing" in fake_llm.calls[0]["json"]["messages"][0]["content"]
+    assert f"reply exactly: {llm.NOT_COVERED}" in fake_llm.calls[0]["json"]["messages"][0]["content"]
 
 
 def status_error(code, headers=None):
@@ -208,6 +208,12 @@ ROUND_ROBIN = [
     ("Too large and it degenerates into FCFS [4:03].", "Too large and it degenerates into FCFS [4:03]."),
     # a reasonable citation that is not the single best match is kept
     ("Round robin gives each process a quantum [3:33].", "Round robin gives each process a quantum [3:33]."),
+    # live failure 3: refusal with a made-up citation -> citation removed
+    ("Nothing can be answered [6:07].", "Nothing can be answered."),
+    # terse real answer with no word overlap keeps its citation
+    ("Yes [4:03].", "Yes [4:03]."),
+    # canned refusal from the prompt -> returned clean, whatever the model appended
+    ("The lecture does not cover that [3:33].", "The lecture does not cover that."),
     # off-topic refusal stays uncited
     ("The excerpts do not cover virtual memory paging.", "The excerpts do not cover virtual memory paging."),
     # once the reply cites something, uncited sentences are not given extra citations
