@@ -76,7 +76,7 @@ def _sources(lecture_id: str, question: str, expect_start: float | None):
 
 
 def _check_sections(sections, chunks):
-    assert 2 <= len(sections) <= 12
+    assert 2 <= len(sections) <= timeline.MAX_SECTIONS
     assert sections[0].start == chunks[0].start and sections[-1].end == chunks[-1].end
     for a, b in zip(sections, sections[1:]):
         assert a.end == b.start and a.start < a.end

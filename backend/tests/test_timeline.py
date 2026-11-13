@@ -187,3 +187,36 @@ def test_demo_cache_is_committed():
     path = config.DATA_DIR / "cache" / "demo.timeline.json"
     sections = [Section(**s) for s in json.loads(path.read_text())]
     assert sections[0].start == 0 and sections[-1].end == 270
+
+
+# --- live-run findings (small models) ---
+
+def test_snaps_rounded_starts_to_chunk_starts(fake_llm, monkeypatch):
+    odd = [Chunk(lecture_id="o", start=st, end=en, text="t") for st, en in [(0, 31.2), (31.2, 59.6), (59.6, 90)]]
+    monkeypatch.setattr(store, "get_chunks", lambda lid: odd, raising=False)
+    fake_llm.reply("groq", reply(("A", 0), ("B", 31), ("C", 60)))
+    assert as_tuples(timeline.build("o")) == [("A", 0, 31.2), ("B", 31.2, 59.6), ("C", 59.6, 90)]
+
+
+def test_one_section_per_chunk_is_merged_to_max(fake_llm, monkeypatch):
+    many = [Chunk(lecture_id="m", start=i * 30, end=i * 30 + 30, text="t") for i in range(14)]
+    monkeypatch.setattr(store, "get_chunks", lambda lid: many, raising=False)
+    fake_llm.reply("groq", reply(*[(f"T{i}", i * 30) for i in range(13)]))  # live failure: 13 sections
+    sections = timeline.build("m")
+    assert len(sections) == timeline.MAX_SECTIONS
+    assert sections[0].start == 0 and sections[-1].end == 420
+    assert all(a.end == b.start for a, b in zip(sections, sections[1:]))
+
+
+def test_merge_keeps_longer_sections_title(fake_llm, chunks, monkeypatch):
+    monkeypatch.setattr(timeline, "MAX_SECTIONS", 2)
+    fake_llm.reply("groq", reply(("Races", 0), ("Locks", 60), ("Deadlock", 120)))
+    # Races and Locks are both 60s, Deadlock 80s: Races (first shortest) merges into Locks
+    assert as_tuples(timeline.build("lec")) == [("Races", 0, 120), ("Deadlock", 120, 200)]
+
+
+def test_prompt_states_section_limits(fake_llm, chunks):
+    fake_llm.reply("groq", reply(("All", 0)))
+    timeline.build("lec")
+    prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
+    assert f"into {timeline.MIN_SECTIONS} to {timeline.MAX_SECTIONS} topic sections" in prompt
