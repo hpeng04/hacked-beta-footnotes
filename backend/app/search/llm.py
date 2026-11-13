@@ -12,6 +12,7 @@ import httpx
 
 from .. import config
 from ..schemas import Chunk
+from .retrieval import STOPWORDS
 
 PROVIDERS = {
     "groq": ("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),
@@ -84,18 +85,20 @@ def fmt_time(seconds: float) -> str:
 
 
 ANSWER_PROMPT = """You answer questions about a lecture using only the transcript excerpts below.
-Each excerpt starts with its timestamp in [m:ss].
+Each excerpt is labelled with the time it starts, like (Excerpt at [1:35]).
 
 Rules:
 - Use only the excerpts. If they do not answer the question, say so in one sentence and cite nothing.
-- After every claim, cite the excerpt timestamp in square brackets exactly as given, e.g. [1:35].
+- End every sentence with the label of the excerpt it comes from, in square brackets.
+  Example: Deadlock needs four conditions [1:35].
 - Be brief: 1 to 4 sentences, plain text, no markdown.
 
-Excerpts:
 {sources}
 
 Question: {question}
 Answer:"""
+
+MIN_GROUNDING_OVERLAP = 3  # shared content words before a citation is added or moved
 
 
 def answer(question: str, sources: list[Chunk]) -> str:
@@ -103,11 +106,11 @@ def answer(question: str, sources: list[Chunk]) -> str:
         return "Nothing in this lecture matches that question."
     ordered = sorted(sources, key=lambda c: c.start)
     prompt = ANSWER_PROMPT.format(
-        sources="\n".join(f"[{fmt_time(c.start)}] {c.text}" for c in ordered),
+        sources="\n\n".join(f"(Excerpt at [{fmt_time(c.start)}])\n{c.text}" for c in ordered),
         question=question,
     )
     try:
-        return _normalize_citations(complete(prompt).strip())
+        return _ground_citations(_normalize_citations(complete(prompt).strip()), ordered)
     except LLMError:  # both providers down: show the best match instead of failing
         top = sources[0]
         return f"[{fmt_time(top.start)}] {top.text}"
@@ -116,3 +119,34 @@ def answer(question: str, sources: list[Chunk]) -> str:
 def _normalize_citations(text: str) -> str:
     """Some models cite as 【1:35】 or (1:35); rewrite to [1:35] so the frontend can link them."""
     return re.sub(r"[【(（]\s*((?:\d+:)?\d+:\d\d)\s*[】)）]", r"[\1]", text)
+
+
+CITATION = re.compile(r"\[((?:\d+:)?\d+:\d\d)\]")
+
+
+def _content_words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]{3,}", CITATION.sub(" ", text.lower()))) - STOPWORDS
+
+
+def _ground_citations(reply: str, sources: list[Chunk]) -> str:
+    """Repair citations small models get wrong, by word overlap with the sources.
+
+    Per sentence: no citation -> add the best-matching source (only if the reply cites
+    nothing at all, so "the lecture doesn't cover X" stays uncited); citations that match
+    the sentence far worse than another source -> replace them with that source.
+    """
+    by_time = {fmt_time(c.start): _content_words(c.text) for c in sources}
+    cites_anything = bool(CITATION.search(reply))
+    out = []
+    for sentence in re.split(r"(?<=[.!?])\s+", reply):
+        words = _content_words(sentence)
+        scores = {t: len(words & w) for t, w in by_time.items()}
+        best = max(scores, key=scores.get)
+        cited = CITATION.findall(sentence)
+        if scores[best] >= MIN_GROUNDING_OVERLAP:
+            if not cited and not cites_anything:
+                sentence = re.sub(r"([.!?]?)$", rf" [{best}]\1", sentence, count=1)
+            elif cited and 2 * max(scores.get(t, 0) for t in cited) < scores[best]:
+                sentence = CITATION.sub(f"[{best}]", sentence)
+        out.append(sentence)
+    return " ".join(out)

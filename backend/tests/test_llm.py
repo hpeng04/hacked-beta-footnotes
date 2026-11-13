@@ -109,7 +109,7 @@ def test_answer_prompt_has_question_and_timestamped_sources_in_order(fake_llm):
     llm.answer("what is deadlock", SOURCES)
     prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
     assert "Question: what is deadlock" in prompt
-    assert prompt.index("[1:35] Locks create deadlock.") < prompt.index("[2:10] Deadlock needs four conditions.")
+    assert prompt.index("(Excerpt at [1:35])\nLocks create deadlock.") < prompt.index("(Excerpt at [2:10])\nDeadlock needs four conditions.")
 
 
 def test_answer_falls_back_to_top_source_when_llm_down(fake_llm):
@@ -188,3 +188,31 @@ def test_ollama_gets_longer_timeout(fake_llm, monkeypatch):
     monkeypatch.setattr(config, "LLM_PROVIDER", "groq")
     llm.complete("hi")
     assert seen == [llm.TIMEOUTS["ollama"], llm.DEFAULT_TIMEOUT]
+
+
+# --- citation grounding (small models, e.g. gemma on Ollama) ---
+
+ROUND_ROBIN = [
+    Chunk(lecture_id="os", start=213.7, end=243.7, text="Okay, round robin. Each process gets a small time slice, called a quantum."),
+    Chunk(lecture_id="os", start=243.7, end=273.7, text="Choosing the quantum is the key design decision. Too large and round robin degenerates into FCFS."),
+    Chunk(lecture_id="os", start=367.8, end=397.8, text="Homework three: implement gradient descent from scratch. Due next Tuesday."),
+]
+
+
+@pytest.mark.parametrize("raw,grounded", [
+    # live failure 1: no citation at all -> best matching source added
+    ("Due next Tuesday.", "Due next Tuesday [6:07]."),
+    # live failure 2: copied excerpt-label style, cited the neighbouring chunk -> moved
+    ("[3:33] Choosing the quantum is the key design decision.", "[4:03] Choosing the quantum is the key design decision."),
+    # correct citations are left alone
+    ("Too large and it degenerates into FCFS [4:03].", "Too large and it degenerates into FCFS [4:03]."),
+    # a reasonable citation that is not the single best match is kept
+    ("Round robin gives each process a quantum [3:33].", "Round robin gives each process a quantum [3:33]."),
+    # off-topic refusal stays uncited
+    ("The excerpts do not cover virtual memory paging.", "The excerpts do not cover virtual memory paging."),
+    # once the reply cites something, uncited sentences are not given extra citations
+    ("Due next Tuesday [6:07]. Implement gradient descent from scratch.", "Due next Tuesday [6:07]. Implement gradient descent from scratch."),
+])
+def test_answer_grounds_citations(fake_llm, raw, grounded):
+    fake_llm.reply("groq", raw)
+    assert llm.answer("q", ROUND_ROBIN) == grounded
