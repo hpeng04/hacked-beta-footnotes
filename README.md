@@ -65,7 +65,7 @@ Put each demo video in `backend/data/uploads/` as `<lecture_id>.mp4`; it is then
 To add a demo lecture (needs `ffmpeg`; transcription is slow on CPU):
 
 ```bash
-cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE_ID
+cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE_ID --model small
 ```
 
 ```bash
@@ -73,6 +73,14 @@ cd backend && .venv/bin/python -m scripts.build_timelines LECTURE_ID
 ```
 
 Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`.
+
+Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
+
+```bash
+cd backend && .venv/bin/python -m scripts.preprocess --warmup
+```
+
+Live uploads use `WHISPER_MODEL` from `.env` (`base` in `.env.example`); `--model` overrides it for one run of the script.
 
 ## Team task division
 

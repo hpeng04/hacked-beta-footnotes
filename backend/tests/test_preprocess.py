@@ -2,7 +2,7 @@
 import pytest
 
 from app import config
-from app.ingestion import pipeline, store
+from app.ingestion import pipeline, store, transcribe
 from scripts import preprocess
 
 SEGMENTS = [
@@ -137,9 +137,54 @@ def test_reindex_reports_a_broken_transcript_and_continues(capsys):
     assert "bad: FAILED" in out and "good: 1 chunks indexed" in out
 
 
+# --- --model ---
+
+def test_model_overrides_whisper_model_for_the_run(video, monkeypatch):
+    monkeypatch.setattr(config, "WHISPER_MODEL", "base")
+    used = []
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: used.append(config.WHISPER_MODEL) or SEGMENTS)
+    assert preprocess.main([str(video), "lec", "--model", "small"]) == 0
+    assert used == ["small"]
+
+
+def test_whisper_model_from_config_by_default(video, monkeypatch):
+    monkeypatch.setattr(config, "WHISPER_MODEL", "base")
+    used = []
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: used.append(config.WHISPER_MODEL) or SEGMENTS)
+    preprocess.main([str(video), "lec"])
+    assert used == ["base"]
+
+
+# --- --warmup ---
+
+def test_warmup_loads_both_models(monkeypatch, capsys):
+    loaded = []
+    monkeypatch.setattr(config, "WHISPER_MODEL", "base")
+    monkeypatch.setattr(store, "_embed", lambda texts: loaded.append("embed") or [[0.0]])
+    monkeypatch.setattr(transcribe, "_whisper", lambda: loaded.append(config.WHISPER_MODEL))
+    monkeypatch.setattr(preprocess.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    assert preprocess.main(["--warmup", "--model", "tiny"]) == 0
+    assert loaded == ["embed", "tiny"]
+    out = capsys.readouterr().out
+    assert "embedding model all-MiniLM-L6-v2: ready" in out and "whisper model tiny: ready" in out
+    assert "ffmpeg: found" in out
+
+
+def test_warmup_reports_every_failure(monkeypatch, capsys):
+    def boom(*args):
+        raise OSError("download blocked")
+
+    monkeypatch.setattr(store, "_embed", boom)
+    monkeypatch.setattr(transcribe, "_whisper", boom)
+    monkeypatch.setattr(preprocess.shutil, "which", lambda name: None)
+    assert preprocess.main(["--warmup"]) == 1
+    out = capsys.readouterr().out
+    assert out.count("FAILED (download blocked)") == 2 and "ffmpeg: FAILED" in out
+
+
 # --- arguments ---
 
-@pytest.mark.parametrize("argv", [[], ["video.mp4"], ["--reindex", "video.mp4", "lec"]])
+@pytest.mark.parametrize("argv", [[], ["video.mp4"], ["--reindex", "video.mp4", "lec"], ["--warmup", "x.mp4"], ["--reindex", "--warmup"]])
 def test_bad_arguments_exit_with_usage(argv):
     with pytest.raises(SystemExit) as e:
         preprocess.main(argv)
