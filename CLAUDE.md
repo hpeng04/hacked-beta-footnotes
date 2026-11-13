@@ -37,3 +37,4 @@ cd frontend && npm install && npm run dev
 - Timestamps are seconds as floats everywhere.
 - Never commit `.env`, uploads or the Chroma DB.
 - Keep it simple: hackathon code, no extra infra (no queues, auth or Docker) unless needed for the demo.
+- Follow conventional git commit/pr/branch naming standards
