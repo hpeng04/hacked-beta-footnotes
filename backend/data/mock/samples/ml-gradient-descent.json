@@ -1,0 +1,80 @@
+[
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 0.0,
+    "end": 31.2,
+    "text": "Alright, so last time we wrote down the loss function for linear regression, mean squared error. Today the question is, how do we actually minimize it? For linear regression there's a closed form solution, the normal equation, but it needs a matrix inverse, which is cubic in the number of features and doesn't exist for most models anyway."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 31.2,
+    "end": 59.6,
+    "text": "So we use gradient descent. The intuition: you're on a hillside in fog and want to get to the valley. You can't see, but you can feel the slope under your feet. Take a step downhill, repeat. The gradient points uphill, steepest ascent, so we step in the negative gradient direction."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 59.6,
+    "end": 93.3,
+    "text": "Formally, theta new equals theta minus eta times the gradient of the loss. Eta is the learning rate, the step size. That one line is basically the entire algorithm. Everything else today is about making it work well in practice."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 93.3,
+    "end": 123.2,
+    "text": "The learning rate matters a lot. Too small and training takes forever. Too large and you overshoot the minimum, bounce around, or even diverge, loss goes to infinity. A practical tip: try a few values on a log scale, like point one, point zero one, point zero zero one, and plot the loss curves."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 123.2,
+    "end": 153.8,
+    "text": "Plain gradient descent, also called batch gradient descent, computes the gradient over the entire dataset every step. With a million examples, that's a million gradient computations per single update. Way too slow."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 153.8,
+    "end": 181.6,
+    "text": "Stochastic gradient descent, SGD, uses one random example per step. Updates are super cheap but very noisy. Interestingly the noise can help, it can bounce you out of bad regions. Mini-batch gradient descent is the compromise everybody actually uses, batches of like thirty two to five twelve examples, which also maps nicely onto GPUs."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 181.6,
+    "end": 213.7,
+    "text": "One pass through the whole training set is called an epoch. You typically shuffle the data every epoch, otherwise the batches come in the same order every time and you can get weird cyclic behavior."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 213.7,
+    "end": 243.7,
+    "text": "Now, convexity. For linear regression with squared error, the loss is convex, a bowl, so any local minimum is the global minimum and gradient descent with a small enough learning rate will find it. Neural networks are not convex. There are many local minima and saddle points, and in high dimensions saddle points are actually the bigger problem."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 243.7,
+    "end": 278.1,
+    "text": "Momentum helps here. Instead of stepping along the current gradient, keep a running velocity, an exponential average of past gradients. Like a heavy ball rolling downhill, it builds speed in consistent directions and damps oscillation in directions that keep flipping. Beta is usually point nine."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 278.1,
+    "end": 307.0,
+    "text": "Then there are adaptive methods. RMSprop and Adam keep a per-parameter scale based on recent gradient magnitudes, so parameters with big gradients get smaller steps. Adam combines momentum with that scaling, and it's the default in a lot of deep learning code because it's fairly forgiving about the learning rate."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 307.0,
+    "end": 338.5,
+    "text": "Learning rate schedules are the last piece. Often you start larger and decay over time: step decay, cosine decay, or a warmup phase at the start that ramps the learning rate up for the first few hundred steps. Warmup is especially common for transformers."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 338.5,
+    "end": 367.8,
+    "text": "Quick sanity checks when training goes wrong: is the loss going down at all on a tiny subset? You should be able to overfit ten examples. If not, there's a bug. Also check your gradients numerically with finite differences if you wrote them by hand."
+  },
+  {
+    "lecture_id": "ml-gradient-descent",
+    "start": 367.8,
+    "end": 398.6,
+    "text": "Okay. Homework three: implement batch, stochastic and mini-batch gradient descent for linear regression from scratch in numpy, plot loss versus epoch for three learning rates. Due next Tuesday. Next lecture: regularization and overfitting."
+  }
+]

@@ -1,0 +1,74 @@
+[
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 0.0,
+    "end": 31.2,
+    "text": "Morning everyone. Today we're doing photosynthesis, which is basically how almost all the energy in the biosphere gets in. The overall equation: six CO2 plus six water plus light gives one glucose plus six oxygen. But that equation hides two very different stages, and that's what we'll unpack."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 31.2,
+    "end": 59.6,
+    "text": "Where does it happen? In the chloroplast. Two membranes on the outside, and inside you've got stacks of flattened sacs called thylakoids. A stack is a granum. The fluid around the stacks is the stroma. Remember that layout, because stage one happens in the thylakoid membrane and stage two happens in the stroma."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 59.6,
+    "end": 93.3,
+    "text": "The pigment that does the work is chlorophyll. Chlorophyll a and b absorb strongly in blue and red light and reflect green, which is why leaves look green. Carotenoids are accessory pigments, they absorb other wavelengths and also protect against too much light. Fall colors are carotenoids you see once chlorophyll breaks down."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 93.3,
+    "end": 123.2,
+    "text": "Stage one is the light dependent reactions. Light hits photosystem two first, confusingly, it was discovered second. The energy excites an electron in the reaction center, P680. That electron is passed down an electron transport chain. To replace it, photosystem two splits water. And that, right there, is where the oxygen we breathe comes from."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 123.2,
+    "end": 153.8,
+    "text": "As electrons move down the chain, protons get pumped into the thylakoid space. Now you have a proton gradient across the membrane. Protons flow back out through ATP synthase, which spins like a turbine and makes ATP. This is called chemiosmosis, same principle as in mitochondria, which is a nice example of evolution reusing machinery."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 153.8,
+    "end": 181.6,
+    "text": "Then the electrons reach photosystem one, P700, get re-energized by more light, and finally reduce NADP plus to NADPH. So the outputs of stage one are ATP and NADPH, the energy currency and the reducing power, plus oxygen as a byproduct. No sugar has been made yet. That's a common exam mistake."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 181.6,
+    "end": 213.7,
+    "text": "Stage two is the Calvin cycle, sometimes called the light independent reactions. I don't love calling them dark reactions, because they mostly run in the daytime when ATP and NADPH are available. It happens in the stroma and it's where carbon actually gets fixed into sugar."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 213.7,
+    "end": 243.7,
+    "text": "Step one is carbon fixation. The enzyme rubisco attaches CO2 to a five carbon sugar called RuBP. Rubisco is probably the most abundant protein on Earth, partly because it's really slow, so plants need a lot of it. The product splits into two three carbon molecules."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 243.7,
+    "end": 278.1,
+    "text": "Step two is reduction, using the ATP and NADPH from stage one to turn those into G3P. Step three is regeneration. Most G3P is recycled to rebuild RuBP so the cycle keeps going. For every three CO2 fixed, you get one net G3P out, and two G3Ps make a glucose."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 278.1,
+    "end": 307.0,
+    "text": "Now, rubisco has a flaw. It can grab oxygen instead of CO2. That's photorespiration, and it wastes energy. It gets worse when it's hot and dry, because plants close their stomata to save water, so CO2 inside the leaf drops and O2 builds up."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 307.0,
+    "end": 338.5,
+    "text": "Some plants evolved workarounds. C4 plants like corn and sugarcane first fix CO2 in mesophyll cells, then pump it into bundle sheath cells where rubisco works at high CO2. CAM plants like cacti separate the steps in time instead, they open stomata at night, store CO2 as an acid, and use it during the day."
+  },
+  {
+    "lecture_id": "bio-photosynthesis",
+    "start": 338.5,
+    "end": 367.8,
+    "text": "Okay, to wrap up: light reactions in the thylakoids make ATP, NADPH and oxygen; the Calvin cycle in the stroma spends them to fix CO2. For Wednesday, read chapter ten and do the photosynthesis worksheet. Lab report on leaf disk flotation is due next Monday."
+  }
+]
