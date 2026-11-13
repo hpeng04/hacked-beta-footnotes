@@ -72,7 +72,7 @@ cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE
 cd backend && .venv/bin/python -m scripts.build_timelines LECTURE_ID
 ```
 
-Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`.
+Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`. Give demo lectures a named id such as `os-lecture`: cache files of live uploads (ids of 8 hex characters) are git-ignored.
 
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 

@@ -7,4 +7,6 @@ dist/
 backend/data/uploads/*
 backend/data/chroma/
 backend/data/cache/*.status.json
+# live uploads get 8-hex-char ids; demo lectures use named ids and are committed
+backend/data/cache/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*.json
 !.gitkeep
