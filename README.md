@@ -50,6 +50,30 @@ npm install
 npm run dev
 ```
 
+## Demo lectures
+
+Transcripts and timelines of the demo lectures are committed in `backend/data/cache`. The videos and the vector DB are not.
+
+After cloning or pulling new transcripts, rebuild the vector DB (no Whisper run):
+
+```bash
+cd backend && .venv/bin/python -m scripts.preprocess --reindex
+```
+
+Put each demo video in `backend/data/uploads/` as `<lecture_id>.mp4`; it is then served at `/media/<lecture_id>.mp4`.
+
+To add a demo lecture (needs `ffmpeg`; transcription is slow on CPU):
+
+```bash
+cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE_ID
+```
+
+```bash
+cd backend && .venv/bin/python -m scripts.build_timelines LECTURE_ID
+```
+
+Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`.
+
 ## Team task division
 
 ### Person 1 — Ingestion

@@ -6,4 +6,5 @@ node_modules/
 dist/
 backend/data/uploads/*
 backend/data/chroma/
+backend/data/cache/*.status.json
 !.gitkeep
