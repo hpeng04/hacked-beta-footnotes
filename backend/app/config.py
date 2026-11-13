@@ -1,7 +1,12 @@
 import os
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+from dotenv import load_dotenv
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BACKEND_DIR / ".env")  # real environment variables win over .env
+
+DATA_DIR = BACKEND_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 CACHE_DIR = DATA_DIR / "cache"
 MOCK_DIR = DATA_DIR / "mock"
