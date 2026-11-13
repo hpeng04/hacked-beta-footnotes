@@ -1,4 +1,4 @@
-# LectureLens
+# TimeStamp
 
 Upload a lecture and get a timestamped transcript you can search and ask questions about ("when did he explain deadlock?"). Answers link to the right moment in the video.
 
