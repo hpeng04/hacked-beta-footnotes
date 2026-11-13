@@ -9,12 +9,12 @@ from app import config
 @pytest.fixture
 def reload_with_env_file(monkeypatch, tmp_path):
     """Reload app.config as if backend/.env held `content`; restore everything afterwards."""
-    real_load = dotenv.load_dotenv
+    real_values = dotenv.dotenv_values
 
     def run(content):
         env_file = tmp_path / ".env"
         env_file.write_text(content)
-        monkeypatch.setattr(dotenv, "load_dotenv", lambda *_a, **_k: real_load(env_file))
+        monkeypatch.setattr(dotenv, "dotenv_values", lambda *_a, **k: real_values(env_file, **k))
         importlib.reload(config)
 
     yield run
@@ -32,7 +32,19 @@ def test_env_file_is_loaded(monkeypatch, reload_with_env_file):
     assert config.LLM_MODEL == "llama3.1"
 
 
-def test_real_env_wins_over_env_file(monkeypatch, reload_with_env_file):
+def test_env_file_wins_over_environment(monkeypatch, reload_with_env_file):
     monkeypatch.setenv("LLM_PROVIDER", "gemini")
     reload_with_env_file("LLM_PROVIDER=ollama\n")
+    assert config.LLM_PROVIDER == "ollama"
+
+
+def test_environment_used_when_env_file_lacks_var(monkeypatch, reload_with_env_file):
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    reload_with_env_file("LLM_MODEL=m\n")
     assert config.LLM_PROVIDER == "gemini"
+
+
+def test_blank_env_file_value_does_not_wipe_environment(monkeypatch, reload_with_env_file):
+    monkeypatch.setenv("LLM_API_KEY", "from-environment")
+    reload_with_env_file("LLM_API_KEY=\n")
+    assert config.LLM_API_KEY == "from-environment"

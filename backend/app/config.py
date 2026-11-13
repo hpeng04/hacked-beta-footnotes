@@ -1,10 +1,11 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BACKEND_DIR / ".env")  # real environment variables win over .env
+# .env wins over shell/environment variables; blank values in .env are ignored
+os.environ.update({k: v for k, v in dotenv_values(BACKEND_DIR / ".env").items() if v})
 
 DATA_DIR = BACKEND_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
