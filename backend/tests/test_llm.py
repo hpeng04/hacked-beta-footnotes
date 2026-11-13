@@ -175,3 +175,16 @@ def test_no_retry_on_other_errors(fake_llm, sleeps):
     fake_llm.reply("generativelanguage", "from gemini")
     assert llm.complete("hi") == "from gemini"
     assert sleeps == []
+
+
+def test_ollama_gets_longer_timeout(fake_llm, monkeypatch):
+    seen = []
+    real = fake_llm.__call__
+    monkeypatch.setattr(httpx, "post", lambda url, json, headers, timeout: seen.append(timeout) or real(url, json, headers, timeout))
+    monkeypatch.setattr(config, "LLM_PROVIDER", "ollama")
+    fake_llm.reply("localhost:11434", "x")
+    fake_llm.reply("groq", "y")
+    llm.complete("hi")
+    monkeypatch.setattr(config, "LLM_PROVIDER", "groq")
+    llm.complete("hi")
+    assert seen == [llm.TIMEOUTS["ollama"], llm.DEFAULT_TIMEOUT]

@@ -20,6 +20,8 @@ PROVIDERS = {
 }
 
 
+TIMEOUTS = {"ollama": 300.0}  # local CPU models are slow on long prompts like the timeline
+DEFAULT_TIMEOUT = 60.0
 RETRY_STATUSES = {429, 503}  # rate limited / overloaded: worth one retry before the backup
 MAX_RETRY_WAIT = 10.0
 
@@ -48,7 +50,7 @@ def _call(provider: str, api_key: str, model: str, prompt: str, json: bool) -> s
     if json:
         body["response_format"] = {"type": "json_object"}
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    r = httpx.post(f"{base_url}/chat/completions", json=body, headers=headers, timeout=60)
+    r = httpx.post(f"{base_url}/chat/completions", json=body, headers=headers, timeout=TIMEOUTS.get(provider, DEFAULT_TIMEOUT))
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 

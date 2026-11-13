@@ -34,9 +34,11 @@ class FakeLLM:
 
 
 @pytest.fixture(autouse=True)
-def fake_llm(monkeypatch, tmp_path):
-    fake = FakeLLM()
+def fake_llm(request, monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")  # never touch the real cache
+    if request.node.get_closest_marker("live") or request.node.get_closest_marker("ollama"):
+        return None  # live tests use the real network and the settings from backend/.env
+    fake = FakeLLM()
     monkeypatch.setattr(httpx, "post", fake)
     monkeypatch.setattr(config, "LLM_PROVIDER", "groq")
     monkeypatch.setattr(config, "LLM_MODEL", "")
