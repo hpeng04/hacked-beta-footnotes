@@ -7,4 +7,5 @@ faster-whisper
 sentence-transformers
 chromadb
 
-# Person 2: add the SDK for the LLM provider you pick (Gemini, Groq or Ollama)
+# Person 2: LLM calls (Groq/Gemini/Ollama via their OpenAI-compatible APIs)
+httpx
