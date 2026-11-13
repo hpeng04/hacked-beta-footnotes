@@ -116,3 +116,19 @@ def test_bad_lecture_ids_never_touch_disk(fakes, bad):
 def test_no_temp_files_left_behind(fakes):
     pipeline.ingest(Path("video.mp4"), "lec")
     assert sorted(p.name for p in config.CACHE_DIR.iterdir()) == ["lec.status.json", "lec.transcript.json"]
+
+
+def test_failed_write_keeps_the_old_file_and_leaves_no_temp_file():
+    path = pipeline.transcript_path("lec")
+    pipeline._write_json(path, [{"ok": True}])
+    with pytest.raises(TypeError):
+        pipeline._write_json(path, {"not serializable": object()})
+    assert json.loads(path.read_text()) == [{"ok": True}]
+    assert [p.name for p in config.CACHE_DIR.iterdir()] == ["lec.transcript.json"]
+
+
+def test_set_status_omits_error_unless_given():
+    pipeline.set_status("lec", pipeline.READY)
+    assert pipeline.get_status("lec") == {"status": "ready"}
+    pipeline.set_status("lec", pipeline.FAILED, "boom")
+    assert pipeline.get_status("lec") == {"status": "failed", "error": "boom"}

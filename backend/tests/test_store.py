@@ -8,6 +8,7 @@ from app.ingestion import store
 from app.schemas import Chunk
 
 DIM = 64
+REAL_EMBED = store._embed  # the autouse fixture below replaces it
 
 
 def fake_embed(texts):
@@ -88,3 +89,43 @@ def test_k_larger_than_lecture():
 def test_add_nothing_is_a_noop():
     store.add_chunks([])
     assert store.get_chunks("a") == []
+
+
+# --- model loading (the real model is never downloaded in unit tests) ---
+
+class FakeSentenceTransformer:
+    made = []
+
+    def __init__(self, name):
+        self.made.append(name)
+
+    def encode(self, texts, normalize_embeddings=False):
+        import numpy as np
+
+        self.normalize = normalize_embeddings
+        return np.ones((len(texts), 3))
+
+
+@pytest.fixture
+def fake_library(monkeypatch):
+    import sys
+    import types
+
+    monkeypatch.setattr(store, "_embed", REAL_EMBED)
+    FakeSentenceTransformer.made = []
+    monkeypatch.setitem(sys.modules, "sentence_transformers", types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer))
+    store._model.cache_clear()
+    yield
+    store._model.cache_clear()
+
+
+def test_model_is_loaded_once_with_the_configured_name(fake_library):
+    assert store._model() is store._model()
+    assert FakeSentenceTransformer.made == ["all-MiniLM-L6-v2"]
+
+
+def test_embed_returns_plain_normalized_lists(fake_library):
+    vectors = store._embed(["a", "b"])
+    assert vectors == [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
+    assert type(vectors[0][0]) is float  # Chroma gets plain floats, not numpy types
+    assert store._model().normalize is True

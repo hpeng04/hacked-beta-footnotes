@@ -50,6 +50,20 @@ npm install
 npm run dev
 ```
 
+## Tests
+
+All from `backend/`. No test needs a model download or an API key unless marked.
+
+| Suite | Command | What it covers |
+|---|---|---|
+| Everything fast | `.venv/bin/python -m pytest` | all suites below |
+| Unit | `.venv/bin/python -m pytest --ignore=tests/integration` | each module alone, neighbours faked |
+| Top-down integration | `.venv/bin/python -m pytest tests/integration/test_top_down.py` | starts at the API with everything below stubbed, then swaps in one real module per level |
+| Big bang integration | `.venv/bin/python -m pytest tests/integration/test_big_bang.py` | the whole backend at once: real ffmpeg, Chroma, cache and scripts; only the models and the LLM are stubbed |
+| Real models | `.venv/bin/python -m pytest -m models` | big bang with the real Whisper and embedding models (slow, downloads them) |
+
+The integration tests need `ffmpeg`; tests that use it are skipped without it.
+
 ## Demo lectures
 
 Transcripts and timelines of the demo lectures are committed in `backend/data/cache`. The videos and the vector DB are not.

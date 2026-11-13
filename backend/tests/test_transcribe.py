@@ -98,3 +98,27 @@ def test_output_feeds_chunking(whisper, video):
 
     chunks = chunk_segments("lec", t.transcribe(video))
     assert [(c.start, c.end, c.text) for c in chunks] == [(0.0, 9.25, "Hello there. Second line.")]
+
+
+# --- model loading ---
+
+def test_whisper_is_loaded_once_from_config(monkeypatch):
+    import sys
+    import types
+
+    from app import config
+
+    made = []
+
+    class FakeWhisperModel:
+        def __init__(self, name, device, compute_type):
+            made.append((name, device, compute_type))
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(config, "WHISPER_MODEL", "tiny")
+    t._whisper.cache_clear()
+    try:
+        assert t._whisper() is t._whisper()
+        assert made == [("tiny", "cpu", "int8")]
+    finally:
+        t._whisper.cache_clear()
