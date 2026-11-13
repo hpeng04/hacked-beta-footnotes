@@ -51,13 +51,16 @@ def get_status(lecture_id: str) -> dict | None:
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def set_status(lecture_id: str, status: str, error: str | None = None) -> None:
+    _write_json(status_path(lecture_id), {"status": status, **({"error": error} if error else {})})
+
+
 def ingest(video_path: Path, lecture_id: str) -> list[Chunk]:
     """Transcribe, chunk and index a lecture. A cached transcript skips Whisper and is only re-indexed.
 
     Records progress in the status file; on failure stores the error there and re-raises.
     """
-    status = status_path(lecture_id)  # validates the id before anything is written
-    _write_json(status, {"status": PROCESSING})
+    set_status(lecture_id, PROCESSING)  # also validates the id before anything else is written
     try:
         chunks = load_transcript(lecture_id)
         if chunks is None:
@@ -65,7 +68,7 @@ def ingest(video_path: Path, lecture_id: str) -> list[Chunk]:
             _write_json(transcript_path(lecture_id), [c.model_dump() for c in chunks])
         store.add_chunks(chunks)
     except Exception as e:
-        _write_json(status, {"status": FAILED, "error": str(e) or type(e).__name__})
+        set_status(lecture_id, FAILED, str(e) or type(e).__name__)
         raise
-    _write_json(status, {"status": READY})
+    set_status(lecture_id, READY)
     return chunks

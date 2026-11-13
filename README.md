@@ -90,10 +90,13 @@ API:
 | Endpoint | Owner | Returns |
 |---|---|---|
 | `POST /upload` | Person 1 | `lecture_id`, `video_url` |
+| `GET /status?lecture_id=` | Person 1 | `lecture_id`, `status` (`processing`, `ready` or `failed`), `error` |
 | `GET /transcript?lecture_id=` | Person 1 | all chunks |
 | `GET /search?lecture_id=&q=` | Person 2 | matching chunks |
 | `POST /ask` | Person 2 | answer plus the chunks it cites |
 | `GET /timeline?lecture_id=` | Person 2 | sections as `{title, start, end}` |
+
+`POST /upload` returns at once and transcribes in the background. Poll `GET /status` until it says `ready` before loading the transcript, timeline or search; on `failed`, show `error`.
 
 Person 1 hands over one hand-made transcript JSON right away, so Persons 2 and 3 can build against mock data.
 
