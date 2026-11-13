@@ -12,6 +12,9 @@ export function upload(file) {
   return request("/upload", { method: "POST", body });
 }
 
+// { lecture_id, status: "processing" | "ready" | "failed", error }
+export const status = (lectureId) => request(`/status?lecture_id=${lectureId}`);
+
 export const search = (lectureId, q) =>
   request(`/search?lecture_id=${lectureId}&q=${encodeURIComponent(q)}`);
 
