@@ -53,8 +53,38 @@ def complete(prompt: str, json: bool = False) -> str | dict:
     raise LLMError("; ".join(errors))
 
 
+def fmt_time(seconds: float) -> str:
+    """95 -> "1:35", 3725 -> "1:02:05"."""
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+ANSWER_PROMPT = """You answer questions about a lecture using only the transcript excerpts below.
+Each excerpt starts with its timestamp in [m:ss].
+
+Rules:
+- Use only the excerpts. If they do not answer the question, say so in one sentence.
+- After every claim, cite the excerpt timestamp exactly as given, e.g. [1:35].
+- Be brief: 1 to 4 sentences, plain text, no markdown.
+
+Excerpts:
+{sources}
+
+Question: {question}
+Answer:"""
+
+
 def answer(question: str, sources: list[Chunk]) -> str:
-    # TODO (step 3): prompt the LLM with the question and sources, cite timestamps in the answer
     if not sources:
         return "Nothing in this lecture matches that question."
-    return f"(placeholder answer) See {sources[0].start:.0f}s: {sources[0].text}"
+    ordered = sorted(sources, key=lambda c: c.start)
+    prompt = ANSWER_PROMPT.format(
+        sources="\n".join(f"[{fmt_time(c.start)}] {c.text}" for c in ordered),
+        question=question,
+    )
+    try:
+        return complete(prompt).strip()
+    except LLMError:  # both providers down: show the best match instead of failing
+        top = sources[0]
+        return f"[{fmt_time(top.start)}] {top.text}"

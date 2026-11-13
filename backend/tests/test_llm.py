@@ -81,13 +81,38 @@ def test_no_backup_configured(fake_llm, monkeypatch):
     assert len(fake_llm.calls) == 1
 
 
-# --- answer(): placeholder until step 3 ---
+# --- answer() ---
+
+SOURCES = [
+    Chunk(lecture_id="demo", start=130, end=168, text="Deadlock needs four conditions."),
+    Chunk(lecture_id="demo", start=95, end=130, text="Locks create deadlock."),
+]
+
+
+@pytest.mark.parametrize("secs,expected", [(0, "0:00"), (95, "1:35"), (59.9, "0:59"), (3725, "1:02:05")])
+def test_fmt_time(secs, expected):
+    assert llm.fmt_time(secs) == expected
+
 
 def test_answer_without_sources_skips_llm(fake_llm):
     assert "Nothing" in llm.answer("q", [])
     assert fake_llm.calls == []
 
 
-def test_answer_mentions_first_source():
-    src = Chunk(lecture_id="demo", start=95, end=130, text="deadlock text")
-    assert "95" in llm.answer("q", [src])
+def test_answer_returns_llm_text(fake_llm):
+    fake_llm.reply("groq", "  Deadlock is when threads wait forever [1:35].\n")
+    assert llm.answer("what is deadlock", SOURCES) == "Deadlock is when threads wait forever [1:35]."
+
+
+def test_answer_prompt_has_question_and_timestamped_sources_in_order(fake_llm):
+    fake_llm.reply("groq", "x")
+    llm.answer("what is deadlock", SOURCES)
+    prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
+    assert "Question: what is deadlock" in prompt
+    assert prompt.index("[1:35] Locks create deadlock.") < prompt.index("[2:10] Deadlock needs four conditions.")
+
+
+def test_answer_falls_back_to_top_source_when_llm_down(fake_llm):
+    fake_llm.reply("groq", httpx.ConnectError("down"))
+    fake_llm.reply("generativelanguage", httpx.ConnectError("down"))
+    assert llm.answer("q", SOURCES) == "[2:10] Deadlock needs four conditions."
