@@ -84,3 +84,13 @@ def test_timeline_served_from_cache_without_transcript(client):
     path.write_text('[{"title": "T", "start": 0, "end": 10}]')
     r = client.get("/timeline", params={"lecture_id": "cached-only"})
     assert r.status_code == 200 and r.json()[0]["title"] == "T"
+
+
+# --- review findings: metadata and unsafe ids are not lectures ---
+
+@pytest.mark.parametrize("lecture_id", ["questions", "sample_questions", "transcript", "timeline", "../timeline", "../mock/transcript"])
+def test_non_lectures_return_404(client, fake_llm, lecture_id):
+    assert client.get("/search", params={"lecture_id": lecture_id, "q": "test"}).status_code == 404
+    assert client.post("/ask", json={"lecture_id": lecture_id, "question": "test"}).status_code == 404
+    assert client.get("/timeline", params={"lecture_id": lecture_id}).status_code == 404
+    assert fake_llm.calls == []

@@ -1,6 +1,7 @@
 """Person 2: search, Q&A and timeline endpoints."""
 from fastapi import APIRouter, HTTPException
 
+from ..config import is_valid_lecture_id
 from ..schemas import AskRequest, AskResponse, Chunk, Section
 from . import llm, retrieval, timeline as timeline_mod
 
@@ -15,7 +16,7 @@ def _require_text(value: str, field: str) -> str:
 
 
 def _require_lecture(lecture_id: str) -> None:
-    if not retrieval.transcript(lecture_id):
+    if not is_valid_lecture_id(lecture_id) or not retrieval.transcript(lecture_id):
         raise HTTPException(404, f"Unknown lecture: {lecture_id}")
 
 

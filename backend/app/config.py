@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -15,6 +16,13 @@ CHROMA_DIR = DATA_DIR / "chroma"
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+LECTURE_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")  # also keeps ids safe to use in file names
+
+
+def is_valid_lecture_id(lecture_id: str) -> bool:
+    return bool(LECTURE_ID_RE.fullmatch(lecture_id))
+
+
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")  # groq | gemini | ollama
 LLM_MODEL = os.getenv("LLM_MODEL", "")  # empty = provider default
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")

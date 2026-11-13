@@ -7,8 +7,7 @@ from app import config, mock
 from app.search import retrieval
 from scripts import live_llm_test
 
-SAMPLES = config.MOCK_DIR / "samples"
-QUESTIONS = json.loads((SAMPLES / "questions.json").read_text())
+QUESTIONS = json.loads((config.MOCK_DIR / "sample_questions.json").read_text())
 
 
 @pytest.mark.parametrize("lecture_id", sorted(QUESTIONS))
@@ -55,3 +54,9 @@ def test_live_script_reports_llm_down(fake_llm, capsys):
     out = capsys.readouterr().out
     assert "timeline: FAILED" in out and "fallback answer" in out
     assert not (config.CACHE_DIR / "os-scheduling.timeline.json").exists()
+
+
+def test_samples_dir_holds_only_transcripts():
+    for path in (config.MOCK_DIR / "samples").glob("*.json"):
+        chunks = mock.load_chunks(path.stem)
+        assert chunks and all(c.lecture_id == path.stem for c in chunks), path.name

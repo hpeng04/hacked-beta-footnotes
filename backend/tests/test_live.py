@@ -19,8 +19,7 @@ import pytest
 from app import config, mock
 from app.search import llm, retrieval, timeline
 
-SAMPLES = config.MOCK_DIR / "samples"
-QUESTIONS = json.loads((SAMPLES / "questions.json").read_text())
+QUESTIONS = json.loads((config.MOCK_DIR / "sample_questions.json").read_text())
 LECTURES = sorted(QUESTIONS)
 CITATION = re.compile(r"\[(?:\d+:)?\d+:\d\d\]")
 

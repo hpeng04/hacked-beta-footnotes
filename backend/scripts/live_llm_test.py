@@ -4,7 +4,7 @@ Usage (from backend/, with LLM_* set in .env):
     python -m scripts.live_llm_test [LECTURE_ID ...] [--no-timeline] [--no-ask]
 
 Calls the LLM for real but never writes data/cache. For each lecture it prints the
-generated timeline, then asks the questions in samples/questions.json and checks
+generated timeline, then asks the questions in data/mock/sample_questions.json and checks
 the answer cites the expected chunk (or, for off-topic questions, cites nothing).
 """
 import argparse
@@ -15,7 +15,7 @@ import sys
 from app import config
 from app.search import llm, retrieval, timeline
 
-SAMPLES_DIR = config.MOCK_DIR / "samples"
+QUESTIONS_FILE = config.MOCK_DIR / "sample_questions.json"
 CITATION = re.compile(r"\[(\d+:)?\d+:\d\d\]")
 
 
@@ -50,7 +50,7 @@ def run_question(lecture_id: str, q: str, expect_start: float | None) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    questions = json.loads((SAMPLES_DIR / "questions.json").read_text())
+    questions = json.loads(QUESTIONS_FILE.read_text())
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("lecture_ids", nargs="*", default=sorted(questions))
     parser.add_argument("--no-timeline", action="store_true")

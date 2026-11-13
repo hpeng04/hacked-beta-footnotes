@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 
 import httpx
 import pytest
@@ -220,3 +222,65 @@ def test_prompt_states_section_limits(fake_llm, chunks):
     timeline.build("lec")
     prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
     assert f"into {timeline.MIN_SECTIONS} to {timeline.MAX_SECTIONS} topic sections" in prompt
+
+
+# --- review findings: concurrency ---
+
+
+def test_concurrent_builds_call_llm_once(fake_llm, chunks, monkeypatch):
+    calls = []
+
+    def slow_complete(prompt, json=False):
+        calls.append(1)
+        time.sleep(0.2)  # both requests arrive while the first is still generating
+        return {"sections": [{"title": "All", "start": 0}]}
+
+    monkeypatch.setattr(timeline.llm, "complete", slow_complete)
+    results, errors = [], []
+
+    def worker():
+        try:
+            results.append(timeline.build("lec"))
+        except Exception as e:  # pragma: no cover - the bug this guards against
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == [] and len(calls) == 1
+    assert all(r == results[0] for r in results)
+
+
+def test_concurrent_writers_use_separate_temp_files(chunks, monkeypatch):
+    # Bypass the lock to hit the write path directly: the old shared ".tmp" raced here.
+    monkeypatch.setattr(timeline, "generate", lambda c: [Section(title="All", start=0, end=200)])
+    errors = []
+
+    def worker():
+        try:
+            for _ in range(20):
+                timeline._generate("lec", CHUNKS)
+        except Exception as e:  # pragma: no cover
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert [p.name for p in timeline.cache_path("lec").parent.iterdir()] == ["lec.timeline.json"]
+
+
+# --- review findings: lecture ids ---
+
+@pytest.mark.parametrize("bad", ["../timeline", "../../etc/x", "a/b", "", "x" * 65, "sp ace", "questions.json"])
+def test_invalid_lecture_ids_never_touch_files(fake_llm, bad):
+    with pytest.raises(ValueError):
+        timeline.cache_path(bad)
+    assert timeline.build(bad) == []
+    with pytest.raises(LookupError):
+        timeline.rebuild(bad)
+    assert fake_llm.calls == []

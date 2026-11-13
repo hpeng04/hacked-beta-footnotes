@@ -1,5 +1,9 @@
 """Person 2: topic timeline. One LLM call per lecture, cached."""
 import json
+import os
+import tempfile
+import threading
+from collections import defaultdict
 
 from .. import config
 from ..schemas import Chunk, Section
@@ -24,7 +28,24 @@ Transcript:
 
 
 def cache_path(lecture_id: str):
+    if not config.is_valid_lecture_id(lecture_id):
+        raise ValueError(f"invalid lecture id: {lecture_id!r}")  # never build paths from bad ids
     return config.CACHE_DIR / f"{lecture_id}.timeline.json"
+
+
+# One generation per lecture at a time: concurrent requests wait and then read the cache.
+_locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
+_locks_guard = threading.Lock()
+
+
+def _lock(lecture_id: str) -> threading.Lock:
+    with _locks_guard:
+        return _locks[lecture_id]
+
+
+def _read_cache(lecture_id: str) -> list[Section] | None:
+    path = cache_path(lecture_id)
+    return [Section(**s) for s in json.loads(path.read_text())] if path.exists() else None
 
 
 LLM_FAILURES = (llm.LLMError, ValueError, TypeError, KeyError)
@@ -32,17 +53,20 @@ LLM_FAILURES = (llm.LLMError, ValueError, TypeError, KeyError)
 
 def build(lecture_id: str) -> list[Section]:
     """Cached timeline, else generate one. Never raises: falls back to fixed sections."""
-    path = cache_path(lecture_id)
-    if path.exists():
-        return [Section(**s) for s in json.loads(path.read_text())]
-
-    chunks = retrieval.transcript(lecture_id)
-    if not chunks:
+    if not config.is_valid_lecture_id(lecture_id):
         return []
-    try:
-        return _generate(lecture_id, chunks)
-    except LLM_FAILURES:
-        return _fixed_sections(chunks)  # not cached, so the next call retries the LLM
+    if (cached := _read_cache(lecture_id)) is not None:
+        return cached
+    with _lock(lecture_id):
+        if (cached := _read_cache(lecture_id)) is not None:  # another request just built it
+            return cached
+        chunks = retrieval.transcript(lecture_id)
+        if not chunks:
+            return []
+        try:
+            return _generate(lecture_id, chunks)
+        except LLM_FAILURES:
+            return _fixed_sections(chunks)  # not cached, so the next call retries the LLM
 
 
 def rebuild(lecture_id: str) -> list[Section]:
@@ -51,10 +75,13 @@ def rebuild(lecture_id: str) -> list[Section]:
     Raises LookupError if the lecture has no transcript, or one of LLM_FAILURES.
     On failure the existing cache file is left untouched.
     """
-    chunks = retrieval.transcript(lecture_id)
-    if not chunks:
-        raise LookupError(f"no transcript for {lecture_id}")
-    return _generate(lecture_id, chunks)
+    if not config.is_valid_lecture_id(lecture_id):
+        raise LookupError(f"invalid lecture id: {lecture_id!r}")
+    with _lock(lecture_id):
+        chunks = retrieval.transcript(lecture_id)
+        if not chunks:
+            raise LookupError(f"no transcript for {lecture_id}")
+        return _generate(lecture_id, chunks)
 
 
 def generate(chunks: list[Chunk]) -> list[Section]:
@@ -66,9 +93,14 @@ def _generate(lecture_id: str, chunks: list[Chunk]) -> list[Section]:
     sections = generate(chunks)
     path = cache_path(lecture_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps([s.model_dump() for s in sections], indent=2))
-    tmp.replace(path)  # atomic: readers never see a half-written file
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{lecture_id}.", suffix=".tmp")  # unique per writer
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps([s.model_dump() for s in sections], indent=2))
+        os.replace(tmp, path)  # atomic: readers never see a half-written file
+    except BaseException:
+        os.unlink(tmp)
+        raise
     return sections
 
 
