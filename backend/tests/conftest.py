@@ -34,8 +34,9 @@ class FakeLLM:
 
 
 @pytest.fixture(autouse=True)
-def fake_llm(monkeypatch):
+def fake_llm(monkeypatch, tmp_path):
     fake = FakeLLM()
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")  # never touch the real cache
     monkeypatch.setattr(httpx, "post", fake)
     monkeypatch.setattr(config, "LLM_PROVIDER", "groq")
     monkeypatch.setattr(config, "LLM_MODEL", "")

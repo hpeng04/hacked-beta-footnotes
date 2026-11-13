@@ -1,0 +1,7 @@
+[
+  {"title": "Race conditions", "start": 0, "end": 61},
+  {"title": "Locks", "start": 61, "end": 95},
+  {"title": "Deadlock", "start": 95, "end": 204},
+  {"title": "Semaphores", "start": 204, "end": 240},
+  {"title": "Wrap-up", "start": 240, "end": 270}
+]
