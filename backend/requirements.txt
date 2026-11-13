@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Person 1: ingestion
+faster-whisper
+sentence-transformers
+chromadb
+
+# Person 2: add the SDK for the LLM provider you pick (Gemini, Groq or Ollama)

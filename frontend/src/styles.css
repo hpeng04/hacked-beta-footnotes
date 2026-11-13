@@ -1,0 +1,11 @@
+body { font-family: system-ui, sans-serif; margin: 0; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.layout { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.video { width: 100%; background: #000; aspect-ratio: 16 / 9; }
+.timeline { display: flex; margin-top: 8px; }
+.timeline button { border: 0; color: #fff; padding: 6px 4px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.panel form { display: flex; gap: 8px; }
+.panel input { flex: 1; padding: 6px; }
+.panel ul { padding-left: 18px; }
+.error { color: #c00; }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }

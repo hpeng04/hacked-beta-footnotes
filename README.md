@@ -11,6 +11,45 @@ Upload a lecture and get a timestamped transcript you can search and ask questio
 | Vector DB | Chroma or FAISS (in-process) |
 | Q&A and timeline LLM | Gemini or Groq free tier, Ollama as backup |
 
+## Project structure
+
+```
+backend/
+  app/
+    main.py        FastAPI app
+    schemas.py     shared contract
+    mock.py        mock data loader
+    ingestion/     Person 1: upload, transcribe, chunk, store
+    search/        Person 2: retrieval, Q&A, timeline
+  data/mock/       mock transcript and timeline for lecture "demo"
+  scripts/         preprocess.py for the demo lectures
+frontend/
+  src/
+    api.js         backend calls
+    components/    Person 3: Upload, VideoPlayer, TimelineBar, SearchPanel
+```
+
+Every endpoint already answers with mock data for `lecture_id=demo`. Replace the `TODO`s with the real pipeline.
+
+## Run
+
+Backend:
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app.main:app --reload
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 ## Team task division
 
 ### Person 1 — Ingestion
@@ -50,7 +89,8 @@ API:
 
 | Endpoint | Owner | Returns |
 |---|---|---|
-| `POST /upload` | Person 1 | `lecture_id` |
+| `POST /upload` | Person 1 | `lecture_id`, `video_url` |
+| `GET /transcript?lecture_id=` | Person 1 | all chunks |
 | `GET /search?lecture_id=&q=` | Person 2 | matching chunks |
 | `POST /ask` | Person 2 | answer plus the chunks it cites |
 | `GET /timeline?lecture_id=` | Person 2 | sections as `{title, start, end}` |

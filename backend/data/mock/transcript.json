@@ -1,0 +1,10 @@
+[
+  {"lecture_id": "demo", "start": 0, "end": 28, "text": "Welcome back. Today we cover concurrency problems in operating systems, starting with race conditions."},
+  {"lecture_id": "demo", "start": 28, "end": 61, "text": "A race condition happens when two threads read and write shared data and the result depends on timing."},
+  {"lecture_id": "demo", "start": 61, "end": 95, "text": "We fix races with locks. A mutex lets only one thread into the critical section at a time."},
+  {"lecture_id": "demo", "start": 95, "end": 130, "text": "But locks create a new problem: deadlock. Two threads each hold one lock and wait forever for the other."},
+  {"lecture_id": "demo", "start": 130, "end": 168, "text": "Deadlock needs four conditions: mutual exclusion, hold and wait, no preemption and circular wait."},
+  {"lecture_id": "demo", "start": 168, "end": 204, "text": "To prevent deadlock, break one condition. The usual trick is a global lock ordering, which removes circular wait."},
+  {"lecture_id": "demo", "start": 204, "end": 240, "text": "Semaphores generalize locks with a counter. They are useful for producer and consumer queues."},
+  {"lecture_id": "demo", "start": 240, "end": 270, "text": "Next week: scheduling. Read chapter seven before then."}
+]
