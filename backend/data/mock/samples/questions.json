@@ -1,0 +1,68 @@
+{
+  "os-scheduling": [
+    {
+      "q": "What is the convoy effect?",
+      "expect_start": 93.3
+    },
+    {
+      "q": "How do you pick the size of the time quantum in round robin?",
+      "expect_start": 243.7
+    },
+    {
+      "q": "How does aging prevent starvation?",
+      "expect_start": 307.0
+    },
+    {
+      "q": "How is the next CPU burst predicted?",
+      "expect_start": 153.8
+    },
+    {
+      "q": "What is virtual memory paging?",
+      "expect_start": null
+    }
+  ],
+  "bio-photosynthesis": [
+    {
+      "q": "Where does the oxygen produced by photosynthesis come from?",
+      "expect_start": 93.3
+    },
+    {
+      "q": "What does rubisco do?",
+      "expect_start": 213.7
+    },
+    {
+      "q": "How do CAM plants avoid photorespiration?",
+      "expect_start": 307.0
+    },
+    {
+      "q": "What are the products of the light dependent reactions?",
+      "expect_start": 153.8
+    },
+    {
+      "q": "How does the Krebs cycle work?",
+      "expect_start": null
+    }
+  ],
+  "ml-gradient-descent": [
+    {
+      "q": "What happens if the learning rate is too large?",
+      "expect_start": 93.3
+    },
+    {
+      "q": "What is the difference between SGD and mini-batch gradient descent?",
+      "expect_start": 153.8
+    },
+    {
+      "q": "How does momentum help optimization?",
+      "expect_start": 243.7
+    },
+    {
+      "q": "When is the homework due?",
+      "expect_start": 367.8
+    },
+    {
+      "q": "How do convolutional layers work?",
+      "expect_start": null
+    }
+  ]
+}

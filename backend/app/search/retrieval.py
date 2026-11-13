@@ -1,4 +1,6 @@
 """Person 2: retrieval. Semantic search via the vector DB, keyword match over mock data as fallback."""
+import re
+
 from .. import mock
 from ..ingestion import store
 from ..schemas import Chunk
@@ -26,7 +28,11 @@ def transcript(lecture_id: str) -> list[Chunk]:
     return sorted(chunks or mock.load_chunks(lecture_id), key=lambda c: c.start)
 
 
+STOPWORDS = set("""a an and are as at be by can do does for from how i in is it of on or so that the
+this to was what when where which who why with you""".split())
+
+
 def _keyword_search(lecture_id: str, query: str, k: int) -> list[Chunk]:
-    words = set(query.lower().split())
+    words = set(re.findall(r"[a-z0-9]+", query.lower())) - STOPWORDS
     scored = [(sum(w in c.text.lower() for w in words), c) for c in mock.load_chunks(lecture_id)]
     return [c for score, c in sorted(scored, key=lambda p: -p[0]) if score > 0][:k]

@@ -6,7 +6,8 @@ from .schemas import Chunk, Section
 
 
 def load_chunks(lecture_id: str) -> list[Chunk]:
-    path = MOCK_DIR / "transcript.json"
+    sample = MOCK_DIR / "samples" / f"{lecture_id}.json"  # sample lectures for live LLM testing
+    path = sample if sample.exists() else MOCK_DIR / "transcript.json"
     return [Chunk(**c) for c in json.loads(path.read_text()) if c["lecture_id"] == lecture_id]
 
 

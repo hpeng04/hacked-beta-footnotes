@@ -55,8 +55,13 @@ def rebuild(lecture_id: str) -> list[Section]:
     return _generate(lecture_id, chunks)
 
 
+def generate(chunks: list[Chunk]) -> list[Section]:
+    """One LLM call, no cache. Raises one of LLM_FAILURES."""
+    return _parse(llm.complete(_prompt(chunks), json=True), chunks)
+
+
 def _generate(lecture_id: str, chunks: list[Chunk]) -> list[Section]:
-    sections = _parse(llm.complete(_prompt(chunks), json=True), chunks)
+    sections = generate(chunks)
     path = cache_path(lecture_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
