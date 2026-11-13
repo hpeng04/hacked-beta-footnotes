@@ -1,10 +1,9 @@
 """Person 2: topic timeline. One LLM call per lecture, cached."""
 import json
 
-from .. import config, mock
-from ..ingestion import store
+from .. import config
 from ..schemas import Chunk, Section
-from . import llm
+from . import llm, retrieval
 
 MAX_TRANSCRIPT_CHARS = 24_000  # keeps the prompt under free-tier token limits
 FALLBACK_SECONDS = 300
@@ -30,7 +29,7 @@ def build(lecture_id: str) -> list[Section]:
     if path.exists():
         return [Section(**s) for s in json.loads(path.read_text())]
 
-    chunks = _load_chunks(lecture_id)
+    chunks = retrieval.transcript(lecture_id)
     if not chunks:
         return []
     try:
@@ -41,18 +40,6 @@ def build(lecture_id: str) -> list[Section]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps([s.model_dump() for s in sections], indent=2))
     return sections
-
-
-def _load_chunks(lecture_id: str) -> list[Chunk]:
-    # store.get_chunks is Person 1's (agreed, not written yet); mock data until then
-    get_chunks = getattr(store, "get_chunks", None)
-    chunks = []
-    if get_chunks:
-        try:
-            chunks = get_chunks(lecture_id)
-        except NotImplementedError:
-            pass
-    return sorted(chunks or mock.load_chunks(lecture_id), key=lambda c: c.start)
 
 
 def _prompt(chunks: list[Chunk]) -> str:

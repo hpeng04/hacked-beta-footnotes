@@ -44,3 +44,21 @@ def test_falls_back_to_keywords_when_store_empty(monkeypatch):
 def test_falls_back_while_store_not_implemented():
     # store.query still raises NotImplementedError until Person 1 lands it
     assert retrieval.search("demo", "mutex")
+
+
+# --- transcript() ---
+
+def test_transcript_sorted_from_store(monkeypatch):
+    a = Chunk(lecture_id="l", start=50, end=60, text="b")
+    b = Chunk(lecture_id="l", start=0, end=50, text="a")
+    monkeypatch.setattr(store, "get_chunks", lambda lid: [a, b], raising=False)
+    assert retrieval.transcript("l") == [b, a]
+
+
+def test_transcript_falls_back_to_mock():
+    chunks = retrieval.transcript("demo")
+    assert chunks and chunks == sorted(chunks, key=lambda c: c.start)
+
+
+def test_transcript_unknown_lecture_empty():
+    assert retrieval.transcript("nope") == []

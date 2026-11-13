@@ -13,6 +13,19 @@ def search(lecture_id: str, query: str, k: int = 5) -> list[Chunk]:
     return hits or _keyword_search(lecture_id, query, k)
 
 
+def transcript(lecture_id: str) -> list[Chunk]:
+    """All chunks of a lecture, in time order. Empty if the lecture is unknown."""
+    # store.get_chunks is Person 1's (agreed, not written yet); mock data until then
+    get_chunks = getattr(store, "get_chunks", None)
+    chunks = []
+    if get_chunks:
+        try:
+            chunks = get_chunks(lecture_id)
+        except NotImplementedError:
+            pass
+    return sorted(chunks or mock.load_chunks(lecture_id), key=lambda c: c.start)
+
+
 def _keyword_search(lecture_id: str, query: str, k: int) -> list[Chunk]:
     words = set(query.lower().split())
     scored = [(sum(w in c.text.lower() for w in words), c) for c in mock.load_chunks(lecture_id)]
