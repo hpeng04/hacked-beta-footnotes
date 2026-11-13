@@ -59,13 +59,63 @@ def test_prompt_has_timestamped_lines(fake_llm, chunks):
     assert "0 intro to races\n60 locks and mutexes\n120 deadlock conditions" in prompt
 
 
-def test_prompt_truncates_long_transcripts(fake_llm, monkeypatch):
-    long = [Chunk(lecture_id="big", start=i * 30, end=i * 30 + 30, text="word " * 500) for i in range(200)]
+def transcript_part(prompt):
+    return prompt.split("Transcript:\n", 1)[1]
+
+
+@pytest.mark.parametrize("n,seconds,words", [
+    (720, 5, 30),   # one hour of 5-second chunks: many short lines
+    (200, 30, 500), # few chunks, very long text
+    (5000, 1, 3),   # extreme chunk count
+])
+def test_prompt_transcript_within_budget(fake_llm, monkeypatch, n, seconds, words):
+    long = [Chunk(lecture_id="big", start=i * seconds, end=(i + 1) * seconds, text="word " * words) for i in range(n)]
     monkeypatch.setattr(store, "get_chunks", lambda lid: long, raising=False)
     fake_llm.reply("groq", reply(("All", 0)))
     timeline.build("big")
-    prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
-    assert len(prompt) < timeline.MAX_TRANSCRIPT_CHARS + 2_000
+    text = transcript_part(fake_llm.calls[0]["json"]["messages"][0]["content"])
+    assert len(text) <= timeline.MAX_TRANSCRIPT_CHARS
+    lines = text.split("\n")
+    assert lines[0].startswith("0 ")
+    assert all(len(line) >= timeline.MIN_LINE_CHARS // 2 for line in lines)  # merged, not cut to nothing
+    starts = [int(line.split(" ", 1)[0]) for line in lines]
+    assert starts == sorted(starts) and set(starts) <= {c.start for c in long}
+
+
+def test_short_transcript_not_truncated(fake_llm, chunks):
+    fake_llm.reply("groq", reply(("All", 0)))
+    timeline.build("lec")
+    text = transcript_part(fake_llm.calls[0]["json"]["messages"][0]["content"])
+    assert text == "0 intro to races\n60 locks and mutexes\n120 deadlock conditions"
+
+
+# --- rebuild() ---
+
+def test_rebuild_ignores_cache_and_overwrites(fake_llm, chunks):
+    fake_llm.reply("groq", reply(("Old", 0)), reply(("New", 0)))
+    timeline.build("lec")
+    assert timeline.rebuild("lec")[0].title == "New"
+    assert timeline.build("lec")[0].title == "New"
+
+
+def test_rebuild_raises_and_keeps_cache_on_failure(fake_llm, chunks):
+    fake_llm.reply("groq", reply(("Old", 0)), "not json")
+    fake_llm.reply("generativelanguage", "not json")
+    timeline.build("lec")
+    with pytest.raises(timeline.LLM_FAILURES):
+        timeline.rebuild("lec")
+    assert timeline.build("lec")[0].title == "Old"
+
+
+def test_rebuild_unknown_lecture_raises(fake_llm, chunks):
+    with pytest.raises(LookupError):
+        timeline.rebuild("nope")
+
+
+def test_no_tmp_file_left_behind(fake_llm, chunks):
+    fake_llm.reply("groq", reply(("All", 0)))
+    timeline.build("lec")
+    assert [p.name for p in timeline.cache_path("lec").parent.iterdir()] == ["lec.timeline.json"]
 
 
 # --- cleaning the LLM reply ---

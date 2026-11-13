@@ -19,20 +19,20 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = []
     for lecture_id in args.lecture_ids:
-        path = timeline.cache_path(lecture_id)
-        if args.force:
-            path.unlink(missing_ok=True)
-        elif path.exists():
+        if not args.force and timeline.cache_path(lecture_id).exists():
             print(f"{lecture_id}: cached, skipped (use --force to rebuild)")
             continue
-
-        sections = timeline.build(lecture_id)
-        if not path.exists():  # build() only caches real LLM results
-            reason = "no transcript" if not sections else "LLM failed, got fallback sections"
-            print(f"{lecture_id}: FAILED ({reason})")
+        try:
+            sections = timeline.rebuild(lecture_id)  # keeps the old cache if this fails
+        except LookupError:
+            print(f"{lecture_id}: FAILED (no transcript)")
             failed.append(lecture_id)
             continue
-        print(f"{lecture_id}: {len(sections)} sections -> {path}")
+        except timeline.LLM_FAILURES as e:
+            print(f"{lecture_id}: FAILED (LLM: {e})")
+            failed.append(lecture_id)
+            continue
+        print(f"{lecture_id}: {len(sections)} sections -> {timeline.cache_path(lecture_id)}")
         for s in sections:
             print(f"  {timeline.llm.fmt_time(s.start):>8}  {s.title}")
     return 1 if failed else 0

@@ -46,7 +46,7 @@ def test_llm_failure_exits_nonzero(fake_llm, monkeypatch, capsys):
     fake_llm.reply("groq", httpx.ConnectError("down"))
     fake_llm.reply("generativelanguage", httpx.ConnectError("down"))
     assert build_timelines.main(["lec"]) == 1
-    assert "LLM failed" in capsys.readouterr().out
+    assert "FAILED (LLM:" in capsys.readouterr().out
     assert not timeline.cache_path("lec").exists()
 
 
@@ -61,3 +61,25 @@ def test_continues_after_failure(fake_llm, monkeypatch):
     fake_llm.reply("groq", REPLY)
     assert build_timelines.main(["nope", "lec"]) == 1
     assert timeline.cache_path("lec").exists()
+
+
+def test_failed_force_rebuild_keeps_old_cache(fake_llm, monkeypatch):
+    use_chunks(monkeypatch)
+    fake_llm.reply("groq", REPLY)
+    build_timelines.main(["lec"])
+    before = timeline.cache_path("lec").read_text()
+    fake_llm.reply("groq", httpx.ConnectError("down"))
+    fake_llm.reply("generativelanguage", httpx.ConnectError("down"))
+    assert build_timelines.main(["lec", "--force"]) == 1
+    assert timeline.cache_path("lec").read_text() == before
+
+
+def test_bad_reply_on_force_keeps_old_cache(fake_llm, monkeypatch):
+    use_chunks(monkeypatch)
+    fake_llm.reply("groq", REPLY)
+    build_timelines.main(["lec"])
+    before = timeline.cache_path("lec").read_text()
+    fake_llm.reply("groq", '{"sections": []}')
+    fake_llm.reply("generativelanguage", '{"sections": []}')
+    assert build_timelines.main(["lec", "--force"]) == 1
+    assert timeline.cache_path("lec").read_text() == before
