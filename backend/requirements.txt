@@ -9,3 +9,6 @@ chromadb
 
 # Person 2: LLM calls (Groq/Gemini/Ollama via their OpenAI-compatible APIs)
 httpx
+
+# Tests (run from backend/: python -m pytest)
+pytest
