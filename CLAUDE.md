@@ -1,4 +1,4 @@
-# LectureLens
+# TimeStamp
 
 Upload a lecture, get a searchable timestamped transcript, Q&A with links that seek the video, and a colored topic timeline. Hackathon project, team of 3, zero budget.
 

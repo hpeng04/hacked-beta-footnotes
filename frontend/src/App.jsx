@@ -18,7 +18,7 @@ export default function App() {
 
   return (
     <main>
-      <h1>LectureLens</h1>
+      <h1>TimeStamp</h1>
       <Upload onUploaded={setLecture} />
       <div className="layout">
         <section>
