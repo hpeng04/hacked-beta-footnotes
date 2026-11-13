@@ -25,7 +25,7 @@ export default function App() {
           <VideoPlayer ref={videoRef} src={lecture.video_url && API_URL + lecture.video_url} />
           <TimelineBar lectureId={lecture.lecture_id} onSeek={seek} />
         </section>
-        <SearchPanel lectureId={lecture.lecture_id} onSeek={seek} />
+        <SearchPanel key={lecture.lecture_id} lectureId={lecture.lecture_id} onSeek={seek} />
       </div>
     </main>
   );
