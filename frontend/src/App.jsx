@@ -22,23 +22,31 @@ export default function App() {
     <main>
       <header className="app-header">
         <h1>TimeStamp</h1>
-        <Upload onUploaded={setLecture} />
+        {lecture.video_url && <Upload onUploaded={setLecture} />}
       </header>
 
       <div className="layout">
-        <SearchPanel
-          key={lecture.lecture_id}
-          lectureId={lecture.lecture_id}
-          onSeek={seek}
-        />
+        {lecture.video_url ? (
+          <SearchPanel
+            key={lecture.lecture_id}
+            lectureId={lecture.lecture_id}
+            onSeek={seek}
+          />
+        ) : (
+          <section className="panel">
+            <h2>Ask about this lecture</h2>
+            <p>Upload a recording to get started.</p>
+          </section>
+        )}
 
         <section className="lecture-pane">
           {lecture.video_url ? (
             <VideoPlayer ref={videoRef} src={API_URL + lecture.video_url} />
           ) : (
             <div className="video-empty">
-              <strong>No lecture video loaded</strong>
-              <span>Choose a file above to load a recording.</span>
+              <strong>Upload a lecture recording</strong>
+              <span>Choose a video to open it in TimeStamp.</span>
+              <Upload onUploaded={setLecture} />
             </div>
           )}
         </section>
