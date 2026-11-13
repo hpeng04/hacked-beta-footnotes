@@ -116,3 +116,62 @@ def test_answer_falls_back_to_top_source_when_llm_down(fake_llm):
     fake_llm.reply("groq", httpx.ConnectError("down"))
     fake_llm.reply("generativelanguage", httpx.ConnectError("down"))
     assert llm.answer("q", SOURCES) == "[2:10] Deadlock needs four conditions."
+
+
+# --- live-run findings: citation format, retries ---
+
+@pytest.mark.parametrize("raw,clean", [
+    ("Water is split 【1:33】.", "Water is split [1:33]."),
+    ("See (4:03) and （1:02:05）.", "See [4:03] and [1:02:05]."),
+    ("Already fine [1:33].", "Already fine [1:33]."),
+    ("Not a time (see above).", "Not a time (see above)."),
+])
+def test_answer_normalizes_citations(fake_llm, raw, clean):
+    fake_llm.reply("groq", raw)
+    assert llm.answer("q", SOURCES) == clean
+
+
+def test_answer_prompt_says_cite_nothing_when_unanswerable(fake_llm):
+    fake_llm.reply("groq", "x")
+    llm.answer("q", SOURCES)
+    assert "cite nothing" in fake_llm.calls[0]["json"]["messages"][0]["content"]
+
+
+def status_error(code, headers=None):
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    return httpx.HTTPStatusError(str(code), request=req, response=httpx.Response(code, headers=headers, request=req))
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    waits = []
+    monkeypatch.setattr(llm.time, "sleep", waits.append)
+    return waits
+
+
+@pytest.mark.parametrize("code", [429, 503])
+def test_retries_same_provider_once_on_rate_limit(fake_llm, sleeps, code):
+    fake_llm.reply("groq", status_error(code, {"retry-after": "3"}), "second try")
+    assert llm.complete("hi") == "second try"
+    assert sleeps == [3.0]
+    assert all("groq" in c["url"] for c in fake_llm.calls)
+
+
+def test_retry_wait_is_capped(fake_llm, sleeps):
+    fake_llm.reply("groq", status_error(429, {"retry-after": "600"}), "ok")
+    llm.complete("hi")
+    assert sleeps == [llm.MAX_RETRY_WAIT]
+
+
+def test_falls_back_after_second_rate_limit(fake_llm, sleeps):
+    fake_llm.reply("groq", status_error(429), status_error(429))
+    fake_llm.reply("generativelanguage", "from gemini")
+    assert llm.complete("hi") == "from gemini"
+    assert sleeps == [2.0]
+
+
+def test_no_retry_on_other_errors(fake_llm, sleeps):
+    fake_llm.reply("groq", status_error(401))
+    fake_llm.reply("generativelanguage", "from gemini")
+    assert llm.complete("hi") == "from gemini"
+    assert sleeps == []
