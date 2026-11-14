@@ -104,6 +104,18 @@ Question: {question}
 NOT_COVERED = "The lecture does not cover that."
 UNAVAILABLE = "I couldn't generate a reliable answer. Please try again."
 CITATION = re.compile(r"\[((?:\d+:)?\d+:\d\d)\]")
+SOURCE_TOKEN = re.compile(r"\bs_[A-Za-z0-9_]+\b")
+
+
+def _clean_answer_text(text: str, selected: dict[str, Chunk]) -> str:
+    # Some providers duplicate source_ids into prose, often as (s_...). Only
+    # remove IDs already validated for this sentence; never infer new support.
+    if any(key not in selected for key in SOURCE_TOKEN.findall(text)):
+        raise ValueError("unknown source ID in answer text")
+    text = re.sub(r"[\[(（]\s*(?:s_[A-Za-z0-9_]+[\s,;]*)+[\])）]", "", text)
+    text = SOURCE_TOKEN.sub("", text)
+    text = re.sub(r"\s+([.,!?;:])", r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def answer(question: str, sources: list[Chunk]) -> str:
@@ -141,12 +153,15 @@ def _parse_answer(reply, by_id: dict[str, Chunk]) -> AskResponse:
             raise ValueError("invalid sentence")
         text, ids = item.get("text"), item.get("source_ids")
         if (not isinstance(text, str) or not text.strip() or len(text) > 1500
-                or CITATION.search(text) or "[s_" in text):
+                or CITATION.search(text)):
             raise ValueError("invalid answer text")
         if (not isinstance(ids, list) or not 1 <= len(ids) <= 4
                 or any(not isinstance(key, str) or key not in by_id for key in ids)):
             raise ValueError("unknown or missing source ID")
         selected = {key: by_id[key] for key in ids}
+        text = _clean_answer_text(text, selected)
+        if not text:
+            raise ValueError("empty answer text")
         cited.update(selected)
         sentences.append(AnswerSentence(text=text.strip(), sources=list(selected.values())))
     rendered = " ".join(

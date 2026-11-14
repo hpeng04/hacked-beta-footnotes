@@ -172,6 +172,22 @@ def test_multiple_supporting_excerpts_are_preserved_without_word_overlap_rewrite
     assert result.sentences[0].sources == SOURCES
 
 
+@pytest.mark.parametrize("wrapper", ["({id})", "[{id}]", "{id}", "（{id}）"])
+def test_internal_ids_are_removed_from_prose_without_changing_citation(fake_llm, wrapper):
+    source = SOURCES[1]
+    leaked = wrapper.format(id=source_id(source))
+    fake_llm.reply("groq", reply_sentence(f"Memory is assigned to variables {leaked}.", source))
+    result = llm.answer_result("where is memory mentioned?", SOURCES)
+    assert result.sentences[0].text == "Memory is assigned to variables."
+    assert result.sentences[0].sources == [source]
+    assert "s_" not in result.answer
+
+
+def test_unknown_id_in_prose_is_rejected_instead_of_guessed(fake_llm):
+    fake_llm.reply("groq", reply_sentence("Memory is assigned (s_madeup).", SOURCES[0]))
+    assert llm.answer_result("q", SOURCES).answer == llm.UNAVAILABLE
+
+
 def status_error(code, headers=None):
     req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
     return httpx.HTTPStatusError(str(code), request=req, response=httpx.Response(code, headers=headers, request=req))
