@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 
-const COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#e15759", "#76b7b2"];
+const TOPIC_COLORS = 6; // --topic-1 … --topic-6 in styles.css
+
+// The color of the i-th topic section, shared by the seek bar and the topic list.
+export const colorOf = (i) => `var(--topic-${(i % TOPIC_COLORS) + 1})`;
 
 export const fmt = (s) => {
   const t = Math.max(0, Math.floor(s || 0));
@@ -74,7 +77,7 @@ export default function TimelineBar({ sections, duration, currentTime, onSeek })
     >
       <div className="timeline-track">
         {segments.map((s, i) => {
-          const color = sections.length ? COLORS[i % COLORS.length] : "#8fa39a";
+          const color = sections.length ? colorOf(i) : "var(--stage-idle)";
           const played = s.end > s.start ? (currentTime - s.start) / (s.end - s.start) : 0;
           return (
             <span

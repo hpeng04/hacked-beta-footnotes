@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { timeline } from "../api.js";
-import TimelineBar, { fmt, sectionAt } from "./TimelineBar.jsx";
+import TimelineBar, { colorOf, fmt, sectionAt } from "./TimelineBar.jsx";
 
 const RATES = [0.75, 1, 1.25, 1.5, 2];
 
@@ -65,6 +65,7 @@ const VideoPlayer = forwardRef(function VideoPlayer({ src, lectureId, ready }, r
   const silent = muted || volume === 0;
 
   return (
+    <>
     <div ref={box} className="player" onKeyDown={onKeyDown}>
       <video
         ref={video}
@@ -128,6 +129,35 @@ const VideoPlayer = forwardRef(function VideoPlayer({ src, lectureId, ready }, r
         </div>
       </div>
     </div>
+    <section className="topics" aria-labelledby="topics-heading">
+      <h2 id="topics-heading">Topics</h2>
+      {sections.length ? (
+        <ol>
+          {sections.map((s, i) => (
+            <li key={s.start}>
+              <button
+                type="button"
+                className={s === section ? "topic is-current" : "topic"}
+                aria-current={s === section ? "true" : undefined}
+                style={{ "--color": colorOf(i) }}
+                onClick={() => {
+                  seek(s.start);
+                  video.current.play();
+                }}
+              >
+                <span className="topic-time">{fmt(s.start)}</span>
+                <span className="topic-title">{s.title}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="topics-empty">
+          {ready ? "No topics for this recording yet." : "Topics appear here once the transcript is ready."}
+        </p>
+      )}
+    </section>
+    </>
   );
 });
 

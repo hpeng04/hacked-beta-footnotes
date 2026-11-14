@@ -8,6 +8,39 @@ const DEMO = { lecture_id: "demo", video_url: "", ready: true };
 const POLL_MS = 2000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Static preview of what an answer looks like, shown before anything is uploaded.
+const EXAMPLE_TOPICS = [61, 34, 109, 36, 30];
+
+function Example() {
+  return (
+    <figure className="example" aria-label="Example answer">
+      <figcaption>Example</figcaption>
+      <div className="example-strip" aria-hidden="true">
+        {EXAMPLE_TOPICS.map((length, i) => (
+          <span key={i} style={{ flexGrow: length, "--color": `var(--topic-${i + 1})` }} />
+        ))}
+      </div>
+      <p className="qa-question">Why do two threads corrupt a shared counter?</p>
+      <p className="qa-answer">
+        Both threads read the same value before either writes it back,<span className="citation-marker">1</span>{" "}
+        so one update is lost. A lock makes the read and the write a single step.<span className="citation-marker">2</span>
+      </p>
+      <ol className="footnotes">
+        <li>
+          <span className="citation-number">1</span>
+          <span className="timestamp-chip">0:18–0:44</span>
+          <span className="citation-title">Race conditions</span>
+        </li>
+        <li>
+          <span className="citation-number">2</span>
+          <span className="timestamp-chip">1:05–1:31</span>
+          <span className="citation-title">Locks</span>
+        </li>
+      </ol>
+    </figure>
+  );
+}
+
 export default function App() {
   // "demo" is served from the backend's mock data and has no video file yet.
   // ready: false while an upload is still being transcribed.
@@ -44,82 +77,84 @@ export default function App() {
     videoRef.current.currentTime = seconds;
     videoRef.current.play();
   };
+
+  const hasVideo = Boolean(lecture.video_url);
+
   return (
-    <main className="timestamp-app">
-      <header className="timestamp-header">
-        <h1 className="brand">
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
               <path d="M3 1.8v10.4a.6.6 0 0 0 .92.5l8.1-5.2a.6.6 0 0 0 0-1L3.92 1.3A.6.6 0 0 0 3 1.8Z" />
             </svg>
           </span>
           TimeStamp
-        </h1>
-        {lecture.video_url && (
+        </div>
+        {hasVideo && (
           <div className="recording-actions">
             <Upload onUploaded={setLecture} buttonLabel="Change recording" />
             <button type="button" className="btn btn-quiet" onClick={() => setLecture(DEMO)}>
-              Clear recording
+              Clear
             </button>
           </div>
         )}
       </header>
 
-      <div className="timestamp-workspace">
-        <section className="timestamp-lesson" aria-labelledby="recording-heading">
-          <h2 id="recording-heading">
-            {lecture.filename || "Lecture recording"}
-          </h2>
-          <div className="timestamp-player">
-            {lecture.video_url ? (
-              <VideoPlayer
-                ref={videoRef}
-                src={API_URL + lecture.video_url}
-                lectureId={lecture.lecture_id}
-                ready={lecture.ready}
-              />
-            ) : (
-              <div className="timestamp-upload">
-                <span className="upload-icon" aria-hidden="true">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 16V4m0 0L7 9m5-5 5 5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
-                  </svg>
-                </span>
-                <h3>Upload a lecture recording</h3>
-                <p>Video or audio. Transcribed on this machine.</p>
-                <Upload onUploaded={setLecture} primary />
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="timestamp-qa" aria-label="Lecture questions and answers">
-          {lecture.video_url && !lecture.ready ? (
-            <section className="panel">
-              <h2>Ask about this lecture</h2>
-              {lecture.error ? (
-                <p className="error" role="alert">{lecture.error}</p>
-              ) : (
-                <p className="panel-status" role="status">
+      {hasVideo ? (
+        <main className="workspace">
+          <section className="lesson" aria-labelledby="recording-heading">
+            <div className="lesson-head">
+              <h1 id="recording-heading">{lecture.filename || "Lecture recording"}</h1>
+              {!lecture.ready && !lecture.error && (
+                <span className="pill" role="status">
                   <span className="spinner" aria-hidden="true" />
-                  Transcribing… this can take a few minutes
-                </p>
+                  Transcribing
+                </span>
               )}
-            </section>
-          ) : lecture.video_url ? (
-            <SearchPanel
-              key={lecture.lecture_id}
+            </div>
+            <VideoPlayer
+              ref={videoRef}
+              src={API_URL + lecture.video_url}
               lectureId={lecture.lecture_id}
-              onSeek={seek}
+              ready={lecture.ready}
             />
-          ) : (
-            <section className="panel">
-              <h2>Ask about this lecture</h2>
-              <p className="panel-hint">Upload a recording to start asking questions.</p>
-            </section>
-          )}
-        </aside>
-      </div>
-    </main>
+          </section>
+
+          <aside className="notes" aria-label="Lecture questions and answers">
+            {lecture.ready ? (
+              <SearchPanel key={lecture.lecture_id} lectureId={lecture.lecture_id} onSeek={seek} />
+            ) : (
+              <section className="panel">
+                <h2 className="panel-head">Ask about this lecture</h2>
+                <div className="panel-body">
+                  {lecture.error ? (
+                    <p className="error" role="alert">{lecture.error}</p>
+                  ) : (
+                    <p className="panel-hint">
+                      Transcribing. This can take a few minutes, and you can watch while it works.
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
+          </aside>
+        </main>
+      ) : (
+        <main className="landing">
+          <div className="landing-copy">
+            <h1>
+              Find the <mark>minute</mark> it was explained.
+            </h1>
+            <p className="lede">
+              Upload a lecture and ask about it. Every answer cites the moment it was said, and one
+              click replays it.
+            </p>
+            <Upload onUploaded={setLecture} dropzone />
+          </div>
+          <Example />
+        </main>
+      )}
+    </div>
   );
 }

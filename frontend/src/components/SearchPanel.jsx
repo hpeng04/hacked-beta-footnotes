@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ask } from "../api.js";
 import { fmt } from "./TimelineBar.jsx";
 
@@ -6,20 +6,22 @@ function AnswerText({ answer, sources, sentences, citations, onSeek }) {
   if (citations != null) {
     const numbers = new Map(citations.map((citation, index) => [citation.id, index + 1]));
     return <>
-      {sentences?.length ? sentences.map((sentence, index) => (
-        <span key={index}>
-          {index > 0 && " "}{sentence.text}
-          {(sentence.citation_ids ?? []).filter(id => numbers.has(id)).map(id => {
-            const citation = citations[numbers.get(id) - 1];
-            return <button key={id} type="button" className="citation-marker"
-              aria-label={`Source ${numbers.get(id)}: replay ${citation.title} at ${fmt(citation.start)}`}
-              onClick={() => onSeek(citation.start)}>
-              {numbers.get(id)}
-            </button>;
-          })}
-        </span>
-      )) : answer}
-      {citations.length > 0 && <ol className="answer-citations">
+      <p className="qa-answer">
+        {sentences?.length ? sentences.map((sentence, index) => (
+          <span key={index} className="cited">
+            {index > 0 && " "}{sentence.text}
+            {(sentence.citation_ids ?? []).filter(id => numbers.has(id)).map(id => {
+              const citation = citations[numbers.get(id) - 1];
+              return <button key={id} type="button" className="citation-marker"
+                aria-label={`Source ${numbers.get(id)}: replay ${citation.title} at ${fmt(citation.start)}`}
+                onClick={() => onSeek(citation.start)}>
+                {numbers.get(id)}
+              </button>;
+            })}
+          </span>
+        )) : answer}
+      </p>
+      {citations.length > 0 && <ol className="footnotes">
         {citations.map((citation, index) => <li key={citation.id}>
           <span className="citation-number" aria-hidden="true">{index + 1}</span>
           <button type="button" className="timestamp-chip"
@@ -32,86 +34,99 @@ function AnswerText({ answer, sources, sentences, citations, onSeek }) {
       </ol>}
     </>;
   }
+  const chip = (source, key, label = `[${fmt(source.start)}]`) => (
+    <button
+      key={key}
+      type="button"
+      className="timestamp-chip"
+      aria-label={`Replay at ${fmt(source.start)}`}
+      onClick={() => onSeek(source.start)}
+    >
+      {label}
+    </button>
+  );
   if (sentences?.length) {
-    return sentences.map((sentence, index) => (
-      <span key={index}>
-        {index > 0 && " "}{sentence.text}
-        {sentence.sources.map((source, sourceIndex) => (
-          <span key={sourceIndex}>
-            {" "}<button
-              type="button"
-              className="timestamp-chip answer-timestamp"
-              aria-label={`Replay at ${fmt(source.start)}`}
-              onClick={() => onSeek(source.start)}
-            >
-              [{fmt(source.start)}]
-            </button>
+    return (
+      <p className="qa-answer">
+        {sentences.map((sentence, index) => (
+          <span key={index}>
+            {index > 0 && " "}{sentence.text}
+            {sentence.sources.map((source, sourceIndex) => (
+              <span key={sourceIndex}> {chip(source)}</span>
+            ))}
           </span>
         ))}
-      </span>
-    ));
+      </p>
+    );
   }
   const byTimestamp = new Map(sources.map((source) => [`[${fmt(source.start)}]`, source]));
-  return answer.split(/(\[(?:\d+:)?\d+:\d{2}\])/g).map((part, index) => {
-    const source = byTimestamp.get(part);
-    if (!source) return part;
-    return (
-      <button
-        key={index}
-        type="button"
-        className="timestamp-chip answer-timestamp"
-        aria-label={`Replay at ${fmt(source.start)}`}
-        onClick={() => onSeek(source.start)}
-      >
-        {part}
-      </button>
-    );
-  });
+  return (
+    <p className="qa-answer">
+      {answer.split(/(\[(?:\d+:)?\d+:\d{2}\])/g).map((part, index) => {
+        const source = byTimestamp.get(part);
+        return source ? chip(source, index, part) : part;
+      })}
+    </p>
+  );
 }
 
 export default function SearchPanel({ lectureId, onSeek }) {
   const [question, setQuestion] = useState("");
-  const [askedQuestion, setAskedQuestion] = useState("");
-  const [result, setResult] = useState(null);
+  const [thread, setThread] = useState([]); // [{ question, result }], oldest first
+  const [pending, setPending] = useState(""); // the question being answered
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const body = useRef(null);
+  const latest = useRef(null);
+
+  // Bring the newest question to the top of the panel without scrolling the page.
+  useEffect(() => {
+    if (latest.current) body.current.scrollTop = latest.current.offsetTop;
+  }, [thread.length, pending]);
 
   const submit = async (e) => {
     e.preventDefault();
     const q = question.trim();
-    if (!q || loading) return;
+    if (!q || pending) return;
     setError("");
-    setLoading(true);
+    setPending(q);
+    setQuestion("");
     try {
-      setResult(await ask(lectureId, q));
-      setAskedQuestion(q);
-      setQuestion("");
+      const result = await ask(lectureId, q);
+      setThread((t) => [...t, { question: q, result }]);
     } catch (err) {
       setError(err.message);
+      setQuestion(q); // so the question can be sent again
     } finally {
-      setLoading(false);
+      setPending("");
     }
   };
 
   return (
     <section className="panel">
-      <h2>Ask about this lecture</h2>
-      <div className="panel-body">
-        {!result && !loading && !error && (
+      <h2 className="panel-head">Ask about this lecture</h2>
+      <div className="panel-body" ref={body}>
+        {!thread.length && !pending && !error && (
           <p className="panel-hint">
-            Answers link to timestamps. Click one to replay that part of the lecture.
+            Answers cite the moment it was said. Select a timestamp to replay that part.
           </p>
         )}
-        {result && (
-          <div className="answer-note">
-            <p className="answer-question">{askedQuestion}</p>
-            <div><AnswerText answer={result.answer} sources={result.sources} sentences={result.sentences} citations={result.citations} onSeek={onSeek} /></div>
-          </div>
-        )}
-        {loading && (
-          <p className="panel-status" role="status">
-            <span className="spinner" aria-hidden="true" /> Finding the answer…
-          </p>
+        {thread.map((item, index) => (
+          <article
+            key={index}
+            className="qa"
+            ref={!pending && index === thread.length - 1 ? latest : undefined}
+          >
+            <h3 className="qa-question">{item.question}</h3>
+            <AnswerText {...item.result} onSeek={onSeek} />
+          </article>
+        ))}
+        {pending && (
+          <article className="qa" ref={latest}>
+            <h3 className="qa-question">{pending}</h3>
+            <p className="panel-status" role="status">
+              <span className="spinner" aria-hidden="true" /> Finding the answer…
+            </p>
+          </article>
         )}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
@@ -122,7 +137,7 @@ export default function SearchPanel({ lectureId, onSeek }) {
           placeholder="Ask a question…"
           aria-label="Question about this recording"
         />
-        <button className="btn btn-primary" disabled={loading || !question.trim()}>
+        <button className="btn btn-primary" disabled={Boolean(pending) || !question.trim()}>
           Ask
         </button>
       </form>
