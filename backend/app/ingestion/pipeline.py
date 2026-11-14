@@ -2,6 +2,7 @@
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 
 from .. import config
@@ -11,6 +12,8 @@ from .chunking import chunk_segments
 from .transcribe import transcribe
 
 PROCESSING, READY, FAILED = "processing", "ready", "failed"
+_timing_locks: dict[str, threading.Lock] = {}
+_timing_locks_guard = threading.Lock()
 
 
 def _path(lecture_id: str, kind: str) -> Path:
@@ -25,6 +28,46 @@ def transcript_path(lecture_id: str) -> Path:
 
 def status_path(lecture_id: str) -> Path:
     return _path(lecture_id, "status")
+
+
+def segments_path(lecture_id: str) -> Path:
+    return _path(lecture_id, "segments")
+
+
+def load_segments(lecture_id: str) -> list[Chunk] | None:
+    """Original Whisper segments, before merging them into search chunks."""
+    path = segments_path(lecture_id)
+    return [Chunk(**s) for s in json.loads(path.read_text())] if path.exists() else None
+
+
+def _segments(lecture_id: str, video_path: Path) -> list[Chunk]:
+    return [Chunk(lecture_id=lecture_id, **s) for s in transcribe(video_path) if s["text"].strip()]
+
+
+def _timing_lock(lecture_id: str):
+    with _timing_locks_guard:
+        return _timing_locks.setdefault(lecture_id, threading.Lock())
+
+
+def citation_segments(lecture_id: str) -> list[Chunk] | None:
+    """Recover missing segment timing once for recordings ingested by older versions.
+
+    Chunk text alone cannot tell us when a sentence was spoken. Reuse the saved
+    recording, without changing the searchable transcript, vector index or status.
+    Mock/portable transcripts without a recording retain their available timing.
+    """
+    segments = load_segments(lecture_id)
+    if segments is not None or not config.UPLOAD_DIR.is_dir():
+        return segments
+    videos = sorted(p for p in config.UPLOAD_DIR.iterdir() if p.is_file() and p.stem == lecture_id)
+    if not videos or load_transcript(lecture_id) is None:
+        return None
+    with _timing_lock(lecture_id):
+        segments = load_segments(lecture_id)
+        if segments is None:
+            segments = _segments(lecture_id, videos[0])
+            _write_json(segments_path(lecture_id), [s.model_dump() for s in segments])
+        return segments
 
 
 def _write_json(path: Path, data) -> None:
@@ -75,13 +118,16 @@ def ingest(video_path: Path, lecture_id: str, force: bool = False) -> list[Chunk
             chunks = cached
             store.add_chunks(chunks)
         else:
-            chunks = chunk_segments(lecture_id, transcribe(Path(video_path)))
+            segments = _segments(lecture_id, Path(video_path))
+            chunks = chunk_segments(lecture_id, [s.model_dump(exclude={"lecture_id"}) for s in segments])
             if cached is None:  # nothing to protect: cache first, so a retry skips Whisper
                 _save_transcript(lecture_id, chunks, cached)
+                _write_json(segments_path(lecture_id), [s.model_dump() for s in segments])
                 store.add_chunks(chunks)
             else:  # replacing a working lecture: touch its cache only once indexing worked
                 store.add_chunks(chunks)
                 _save_transcript(lecture_id, chunks, cached)
+                _write_json(segments_path(lecture_id), [s.model_dump() for s in segments])
     except Exception as e:
         set_status(lecture_id, FAILED, str(e) or type(e).__name__)
         raise

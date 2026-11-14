@@ -38,8 +38,12 @@ def test_full_lecture_journey(client, stub_models, clip, fake_llm):
     fake_llm.reply("groq", "A deadlock is two threads waiting on each other [0:31].")
     answer = client.post("/ask", json={"lecture_id": lecture_id, "question": "What is a deadlock?"}).json()
     assert "[0:31]" in answer["answer"]
-    assert answer["sources"][0] == transcript[1]
-    assert all(s in transcript for s in answer["sources"])  # every citation seeks to a real chunk
+    # Search keeps its broad chunk, but the answer cites the original speech segment.
+    assert answer["sources"][0] == {
+        "lecture_id": lecture_id, "start": 31.0, "end": 48.0,
+        "text": "A deadlock happens when two threads wait on each other forever.",
+    }
+    assert all(any(c["start"] <= s["start"] < s["end"] <= c["end"] for c in transcript) for s in answer["sources"])
 
     fake_llm.reply("groq", OS_TIMELINE_REPLY)
     sections = get(client, "/timeline", lecture_id).json()

@@ -2,7 +2,7 @@
 import re
 
 from .. import mock
-from ..ingestion import store
+from ..ingestion import pipeline, store
 from ..schemas import Chunk
 
 
@@ -13,6 +13,23 @@ def search(lecture_id: str, query: str, k: int = 5) -> list[Chunk]:
         hits = []
     # Empty also covers lectures that only exist as mock data (e.g. "demo")
     return hits or _keyword_search(lecture_id, query, k)
+
+
+def answer_sources(lecture_id: str, candidates: list[Chunk]) -> list[Chunk]:
+    """Use original segment timestamps to cite passages inside retrieved chunks."""
+    if not candidates:
+        return []
+    segments = pipeline.citation_segments(lecture_id)
+    if segments is None:
+        return candidates
+    # Preserve retrieval rank for provider-failure fallback; avoid duplicating a
+    # segment when overlapping candidate chunks include the same passage.
+    selected = {}
+    for candidate in candidates:
+        for segment in segments:
+            if segment.start < candidate.end and segment.end > candidate.start:
+                selected.setdefault((segment.start, segment.end), segment)
+    return list(selected.values())
 
 
 def transcript(lecture_id: str) -> list[Chunk]:

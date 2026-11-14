@@ -1,7 +1,8 @@
 """API contract checks for Person 2's endpoints (see README "Shared contract")."""
 import pytest
 
-from app.ingestion import store
+from app import config
+from app.ingestion import pipeline, store
 from app.schemas import Chunk
 
 CHUNK_KEYS = {"lecture_id", "start", "end", "text"}
@@ -69,6 +70,27 @@ def test_ask_provider_failure_shows_only_the_fallback_excerpt(client, memory_lec
     r = client.post("/ask", json={"lecture_id": "c-lecture", "question": "memory?"})
     assert r.status_code == 200
     assert r.json()["sources"] == [memory_lecture[1].model_dump()]
+
+
+def test_ask_cites_actual_memory_segment_instead_of_merged_chunk(client, fake_llm, monkeypatch):
+    speech = [
+        {"start": 94.0, "end": 110.56, "text": "A string is an array of characters. Another approach starts with a pointer."},
+        # Timing and phrase verified with Whisper on the user's sample.mp4.
+        {"start": 110.56, "end": 115.52, "text": "Then we can allocate 4 bytes to it. Now assign a character to each index."},
+        {"start": 115.52, "end": 124.72, "text": "When you no longer need the memory, use free to release it."},
+    ]
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: speech)
+    monkeypatch.setattr(store, "_embed", lambda texts: [[1.0, 0.0] for t in texts])
+    pipeline.ingest(config.UPLOAD_DIR / "unused.mp4", "precise")
+    # The search hit starts at 1:34, but malloc is not spoken until 1:50.
+    assert store.get_chunks("precise")[0].start == 94
+    fake_llm.reply("groq", "Then we can allocate 4 bytes to it [1:50].")
+    r = client.post("/ask", json={"lecture_id": "precise", "question": "what part talks about memory?"})
+    assert r.status_code == 200
+    assert r.json()["sources"] == [{"lecture_id": "precise", **speech[1]}]
+    assert "[1:50]" in r.json()["answer"]
+    prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
+    assert "(Excerpt at [1:50])\nThen we can allocate" in prompt
 
 
 def test_timeline_shape_and_order(client):

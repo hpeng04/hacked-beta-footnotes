@@ -32,6 +32,7 @@ def ask(req: AskRequest):
     question = _require_text(req.question, "question")
     _require_lecture(req.lecture_id)
     sources = retrieval.search(req.lecture_id, question)
+    sources = retrieval.answer_sources(req.lecture_id, sources)
     answer = llm.answer(question, sources)
     return AskResponse(answer=answer, sources=llm.cited_sources(answer, sources))
 

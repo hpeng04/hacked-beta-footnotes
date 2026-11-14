@@ -88,7 +88,9 @@ cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE
 cd backend && .venv/bin/python -m scripts.build_timelines LECTURE_ID
 ```
 
-Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`. Give demo lectures a named id such as `os-lecture`: cache files of live uploads (ids of 8 hex characters) are git-ignored.
+Then commit `data/cache/LECTURE_ID.transcript.json`, `data/cache/LECTURE_ID.segments.json`, and `data/cache/LECTURE_ID.timeline.json`. Give demo lectures a named id such as `os-lecture`: cache files of live uploads (ids of 8 hex characters) are git-ignored.
+
+Search uses merged chunks for context; answer citations use the original Whisper segments in `*.segments.json` to seek to the spoken passage. For an older recording without this cache, its first question recovers segment timing from the saved video once, which can take time on CPU. This leaves its searchable transcript and vector index unchanged. Portable transcripts without segment timing or a saved video can only use their existing chunk timestamps.
 
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 
