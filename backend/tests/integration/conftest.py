@@ -101,20 +101,22 @@ def _ffmpeg(*args):
 
 @pytest.fixture(scope="session")
 def clip(tmp_path_factory):
-    """A short real video file with an audio track. `clip.spoken` says whether it contains SPEECH."""
+    """A short real video file with an audio track. `clip.spoken` says whether it contains SPEECH,
+    `clip.seconds` is the length of the audio."""
     if shutil.which("ffmpeg") is None:
         pytest.skip("ffmpeg not installed")
-    path = tmp_path_factory.mktemp("clip") / "lecture.mp4"
-    video = ["-f", "lavfi", "-i", "color=c=black:s=64x64:r=5"]
-    spoken = _ffmpeg("-f", "lavfi", "-i", f"flite=text='{SPEECH}':voice=slt", *video, "-shortest", str(path)).returncode == 0
+    directory = tmp_path_factory.mktemp("clip")
+    audio, path = directory / "audio.wav", directory / "lecture.mp4"
+    spoken = _ffmpeg("-f", "lavfi", "-i", f"flite=text='{SPEECH}':voice=slt", str(audio)).returncode == 0
     if not spoken:  # this ffmpeg build has no speech synthesizer: a tone still exercises the audio path
-        result = _ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=4", *video, "-shortest", str(path))
+        result = _ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=4", str(audio))
         assert result.returncode == 0, result.stderr.decode()
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, check=True,
-    )
-    return SimpleNamespace(path=path, bytes=path.read_bytes(), spoken=spoken, seconds=float(probe.stdout))
+    with wave.open(str(audio)) as w:
+        seconds = w.getnframes() / w.getframerate()
+    # The video is cut to the audio's length explicitly: "-shortest" alone can overrun by seconds.
+    result = _ffmpeg("-i", str(audio), "-f", "lavfi", "-i", "color=c=black:s=64x64:r=5", "-t", f"{seconds:.3f}", str(path))
+    assert result.returncode == 0, result.stderr.decode()
+    return SimpleNamespace(path=path, bytes=path.read_bytes(), spoken=spoken, seconds=seconds)
 
 
 # Scripted "lectures" for the Whisper stub. With 30 s chunks OS_SCRIPT becomes three chunks

@@ -136,6 +136,41 @@ def test_reprocessing_a_lecture_replaces_it(client, stub_models, clip):
     assert len(get(client, "/search", "lec", q="deadlock light").json()) == 1  # old rows are gone
 
 
+def test_reprocessing_a_lecture_rebuilds_its_timeline(client, stub_models, clip, fake_llm):
+    stub_models.whisper.scripts += [OS_SCRIPT, BIO_SCRIPT]
+    preprocess.main([str(clip.path), "lec"])
+    fake_llm.reply("groq", OS_TIMELINE_REPLY)
+    assert build_timelines.main(["lec"]) == 0
+    assert get(client, "/timeline", "lec").json()[-1]["end"] == 80.0
+
+    assert preprocess.main([str(clip.path), "lec", "--force"]) == 0
+    fake_llm.reply("groq", '{"sections": [{"title": "Photosynthesis", "start": 0}]}')
+    assert build_timelines.main(["lec"]) == 0  # not "cached, skipped": the old timeline is gone
+    assert get(client, "/timeline", "lec").json() == [{"title": "Photosynthesis", "start": 0.0, "end": 45.0}]
+
+
+def test_failed_reprocessing_keeps_the_lecture_working(client, stub_models, clip, tmp_path):
+    stub_models.whisper.scripts.append(OS_SCRIPT)
+    preprocess.main([str(clip.path), "lec"])
+    broken = tmp_path / "broken.mp4"
+    broken.write_bytes(b"not a video")
+
+    assert preprocess.main([str(broken), "lec", "--force"]) == 1
+    assert [c["start"] for c in get(client, "/transcript", "lec").json()] == [0.0, 31.0, 64.0]
+    assert get(client, "/search", "lec", q="deadlock circular wait").json()[0]["start"] == 31.0
+    assert client.get("/media/lec.mp4").content == clip.bytes
+
+
+def test_another_video_cannot_silently_take_over_a_lecture(client, stub_models, clip, tmp_path):
+    stub_models.whisper.scripts.append(OS_SCRIPT)
+    preprocess.main([str(clip.path), "lec"])
+    other = tmp_path / "other.mp4"
+    other.write_bytes(clip.bytes + b"different")
+
+    assert preprocess.main([str(other), "lec"]) == 1
+    assert client.get("/media/lec.mp4").content == clip.bytes
+
+
 @pytest.mark.models
 def test_real_models_end_to_end(client, clip, fake_llm):
     """The same journey with the real Whisper and embedding models (downloads them on first run)."""

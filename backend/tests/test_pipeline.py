@@ -132,3 +132,60 @@ def test_set_status_omits_error_unless_given():
     assert pipeline.get_status("lec") == {"status": "ready"}
     pipeline.set_status("lec", pipeline.FAILED, "boom")
     assert pipeline.get_status("lec") == {"status": "failed", "error": "boom"}
+
+
+# --- force, and what a changed transcript invalidates ---
+
+def write_timeline(lecture_id="lec"):
+    path = config.CACHE_DIR / f"{lecture_id}.timeline.json"
+    path.write_text('[{"title": "Old", "start": 0, "end": 50}]')
+    return path
+
+
+def test_force_transcribes_again_and_replaces_the_transcript(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: SEGMENTS[:1])
+    chunks = pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert [c.end for c in chunks] == [20.0]
+    assert pipeline.load_transcript("lec") == chunks
+    assert fakes["add_chunks"][-1] == chunks
+
+
+def test_failed_forced_run_keeps_the_previous_transcript(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    timeline = write_timeline()
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert pipeline.load_transcript("lec") == CHUNKS
+    assert timeline.exists()
+    assert fakes["add_chunks"] == [CHUNKS]  # the index was not touched either
+
+
+def test_changed_transcript_drops_the_cached_timeline(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    timeline = write_timeline()
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: SEGMENTS[:1])
+    pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert not timeline.exists()
+
+
+def test_identical_forced_transcript_keeps_the_timeline(fakes):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    timeline = write_timeline()
+    pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert timeline.exists()
+
+
+def test_reindexing_a_cached_transcript_keeps_the_timeline(fakes):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    timeline = write_timeline()
+    pipeline.ingest(Path("video.mp4"), "lec")
+    assert timeline.exists()
+
+
+def test_first_transcript_drops_a_leftover_timeline(fakes):
+    config.CACHE_DIR.mkdir(parents=True)
+    timeline = write_timeline()
+    pipeline.ingest(Path("video.mp4"), "lec")
+    assert not timeline.exists()

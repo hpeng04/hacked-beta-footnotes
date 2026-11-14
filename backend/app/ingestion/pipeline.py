@@ -55,17 +55,21 @@ def set_status(lecture_id: str, status: str, error: str | None = None) -> None:
     _write_json(status_path(lecture_id), {"status": status, **({"error": error} if error else {})})
 
 
-def ingest(video_path: Path, lecture_id: str) -> list[Chunk]:
+def ingest(video_path: Path, lecture_id: str, force: bool = False) -> list[Chunk]:
     """Transcribe, chunk and index a lecture. A cached transcript skips Whisper and is only re-indexed.
 
+    force transcribes again even if cached; the old transcript stays until the new one is written.
     Records progress in the status file; on failure stores the error there and re-raises.
     """
     set_status(lecture_id, PROCESSING)  # also validates the id before anything else is written
     try:
-        chunks = load_transcript(lecture_id)
-        if chunks is None:
+        cached = load_transcript(lecture_id)
+        chunks = cached
+        if chunks is None or force:
             chunks = chunk_segments(lecture_id, transcribe(Path(video_path)))
             _write_json(transcript_path(lecture_id), [c.model_dump() for c in chunks])
+            if chunks != cached:  # the cached timeline describes the old transcript
+                _path(lecture_id, "timeline").unlink(missing_ok=True)
         store.add_chunks(chunks)
     except Exception as e:
         set_status(lecture_id, FAILED, str(e) or type(e).__name__)

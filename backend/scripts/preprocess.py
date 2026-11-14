@@ -18,6 +18,7 @@ of the demo doesn't wait on a download.
 --model picks the Whisper model for this run instead of WHISPER_MODEL from .env.
 """
 import argparse
+import filecmp
 import shutil
 import sys
 import time
@@ -38,23 +39,31 @@ def preprocess(video: Path, lecture_id: str, force: bool) -> int:
         print(f"{lecture_id}: FAILED (no such file: {video})")
         return 1
 
-    config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     target = config.UPLOAD_DIR / f"{lecture_id}{video.suffix}"
-    if video.resolve() != target.resolve():
-        shutil.copyfile(video, target)
-
     cached = pipeline.transcript_path(lecture_id)
-    if force:
-        cached.unlink(missing_ok=True)
-    elif cached.exists():
+    if cached.exists() and not force:
+        # The cached transcript belongs to the stored video: never pair it with another one.
+        if target.exists() and not filecmp.cmp(video, target, shallow=False):
+            print(f"{lecture_id}: FAILED (a different video is already processed under this id: "
+                  "use --force to replace it, or another id)")
+            return 1
         print(f"{lecture_id}: transcript cached, only re-indexing (use --force to transcribe again)")
+
+    # With --force the new video is transcribed from where it is, and replaces the stored
+    # one only after that worked: a failure leaves the old video and transcript in place.
+    source = video if force else target
+    config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    if not force and video.resolve() != target.resolve():
+        shutil.copyfile(video, target)
 
     started = time.monotonic()
     try:
-        chunks = pipeline.ingest(target, lecture_id)
+        chunks = pipeline.ingest(source, lecture_id, force=force)
     except Exception as e:
         print(f"{lecture_id}: FAILED ({e})")
         return 1
+    if force and video.resolve() != target.resolve():
+        shutil.copyfile(video, target)
 
     print(f"{lecture_id}: {len(chunks)} chunks in {time.monotonic() - started:.0f}s -> {cached}")
     for c in chunks[:5]:

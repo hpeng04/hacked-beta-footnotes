@@ -59,6 +59,50 @@ def test_force_transcribes_again(whisper, video):
     assert len(store.get_chunks("ml-lecture")) == 2
 
 
+def test_different_video_for_a_cached_lecture_needs_force(whisper, video, tmp_path, capsys):
+    preprocess.main([str(video), "ml-lecture"])
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"another video")
+    assert preprocess.main([str(other), "ml-lecture"]) == 1
+    assert "different video" in capsys.readouterr().out
+    assert (config.UPLOAD_DIR / "ml-lecture.mp4").read_bytes() == b"video"  # media still matches the transcript
+    assert len(whisper) == 1
+
+
+def test_force_replaces_video_and_transcript_together(whisper, video, tmp_path):
+    preprocess.main([str(video), "ml-lecture"])
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"another video")
+    assert preprocess.main([str(other), "ml-lecture", "--force"]) == 0
+    assert (config.UPLOAD_DIR / "ml-lecture.mp4").read_bytes() == b"another video"
+    assert whisper[-1] == other
+
+
+def test_failed_force_keeps_the_working_lecture(whisper, video, tmp_path, monkeypatch, capsys):
+    preprocess.main([str(video), "ml-lecture"])
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"another video")
+
+    def boom(path):
+        raise RuntimeError("model failed")
+
+    monkeypatch.setattr(pipeline, "transcribe", boom)
+    assert preprocess.main([str(other), "ml-lecture", "--force"]) == 1
+    assert "FAILED (model failed)" in capsys.readouterr().out
+    assert len(pipeline.load_transcript("ml-lecture")) == 2
+    assert (config.UPLOAD_DIR / "ml-lecture.mp4").read_bytes() == b"video"
+    assert len(store.get_chunks("ml-lecture")) == 2
+
+
+def test_cached_transcript_without_a_stored_video_accepts_the_video(whisper, video):
+    """Fresh clone: the transcript is committed, the video is not."""
+    preprocess.main([str(video), "ml-lecture"])
+    (config.UPLOAD_DIR / "ml-lecture.mp4").unlink()
+    assert preprocess.main([str(video), "ml-lecture"]) == 0
+    assert (config.UPLOAD_DIR / "ml-lecture.mp4").read_bytes() == b"video"
+    assert len(whisper) == 1
+
+
 def test_video_already_in_uploads_is_not_copied_onto_itself(whisper):
     config.UPLOAD_DIR.mkdir(parents=True)
     target = config.UPLOAD_DIR / "lec.mp4"
