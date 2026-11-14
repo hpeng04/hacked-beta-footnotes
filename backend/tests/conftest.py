@@ -60,6 +60,7 @@ def fake_llm(request, monkeypatch, tmp_path):
     monkeypatch.setattr(config, "LLM_BACKUP_PROVIDER", "gemini")
     monkeypatch.setattr(config, "LLM_BACKUP_MODEL", "")
     monkeypatch.setattr(config, "LLM_BACKUP_API_KEY", "backup-key")
+    monkeypatch.setattr(config, "GROQ_WHISPER_API_KEY", "")  # local Whisper unless a test opts in
     return fake
 
 
