@@ -90,7 +90,7 @@ def test_invalid_model_output_keeps_semantic_boundaries(lecture, monkeypatch, ba
     sentences, _ = lecture
     monkeypatch.setattr(llm, "complete", lambda *a, **k: bad)
     index = seg.generate("lec", sentences)
-    assert [(s.title, s.start) for s in index.sections] == [("Part 1", 0), ("Part 2", 20)]
+    assert [(s.title, s.start) for s in index.sections] == [("Sentence 0", 0), ("Sentence 4", 20)]
 
 
 @pytest.mark.parametrize("error", ["invented", "missing", "duplicate", "dense", "opening"])

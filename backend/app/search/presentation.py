@@ -4,6 +4,7 @@ import logging
 from ..ingestion.timing import source_id
 from ..schemas import ReplayCitation
 from . import llm, segmentation
+from .titles import context_title
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def with_citations(lecture_id, answer):
                             for key, source in grouped.items()]
     else:
         _, passages = llm._group_citations(answer.sentences, answer.sources)
-        answer.citations = [ReplayCitation(section_id=source_id(p), title="Relevant passage", start=p.start, end=p.end)
+        answer.citations = [ReplayCitation(section_id=source_id(p), title=context_title([p]), start=p.start, end=p.end)
                             for p in passages]
     # Evidence stays intact; plain-text clients also receive deduplicated links.
     answer.answer = " ".join(s.text for s in answer.sentences) + " " + " ".join(

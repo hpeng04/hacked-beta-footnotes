@@ -107,7 +107,7 @@ Topic detection is available through `app/search/segmentation.py` and a preproce
 ```bash
 cd backend
 .venv/bin/python -m scripts.build_sections LECTURE_ID
-# Use only local embeddings, with neutral section titles:
+# Use only local embeddings, with titles extracted from section text:
 .venv/bin/python -m scripts.build_sections LECTURE_ID --semantic-only
 # Retry refinement or regenerate a cached result:
 .venv/bin/python -m scripts.build_sections LECTURE_ID --force
@@ -117,11 +117,11 @@ The detector embeds sentences with the existing MiniLM model, compares mean embe
 
 The LLM receives bounded context around candidates and can retain, move to a nearby allowed sentence, or remove each boundary. It must return valid sentence IDs in order, including the opening section. All sentences are then assigned to contiguous groups and validated using the storage layer. Requests are capped at 24,000 characters by default, and batching never creates section boundaries of its own.
 
-Missing or invalid refinement results retain the semantic boundaries and neutral `Part N` titles. That fallback is cached to avoid repeatedly spending model calls; use `--force` to retry refinement. Embedding failures raise an error and preserve the previous cache. Cache fingerprints include the detector settings, embedding model/revision, and configured LLM providers/models; concurrent requests for the same lecture share one generation. Use `segmentation.build(lecture_id, options=Options(...))` from Python to configure context size, prompt budget, or an updated embedding revision.
+Missing or invalid refinement results retain the semantic boundaries and short descriptions extracted from the section text. That fallback is cached to avoid repeatedly spending model calls; use `--force` to retry refinement. Embedding failures raise an error and preserve the previous cache. Cache fingerprints include the detector settings, embedding model/revision, and configured LLM providers/models; concurrent requests for the same lecture share one generation. Use `segmentation.build(lecture_id, options=Options(...))` from Python to configure context size, prompt budget, or an updated embedding revision.
 
 Q&A and the timeline now share this section index. The answer model still receives sentence evidence and returns validated sentence IDs. The API preserves all supporting excerpts in `sources` and `sentences`, while `citations` contains one display link per cited section across the whole answer. Each link includes `section_id`, `title`, `start`, and `end`; its replay target is the earliest cited supporting sentence within the section, not necessarily the section start. Distinct sections retain separate links even when they are close together. If membership is unavailable or mismatches the evidence snapshot, proximity grouping supplies display links while preserving the evidence.
 
-The frontend renders the answer text and titled links without transcript blocks. The timeline uses the same section titles and starts, extending each displayed band through the silence before the following section. Existing timeline generation is retained as a fallback when the section index is unavailable.
+The frontend renders the answer text followed by a list of clickable `mm:ss - description` rows without transcript blocks. Generic generated titles such as `Part 1` are replaced with short descriptions extracted from the section text. The timeline uses the same section titles and starts, extending each displayed band through the silence before the following section. Existing timeline generation is retained as a fallback when the section index is unavailable.
 
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 

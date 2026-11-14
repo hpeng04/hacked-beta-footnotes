@@ -10,6 +10,7 @@ from .. import config
 from ..schemas import Chunk, Section
 from ..ingestion.timing import source_id
 from . import llm, retrieval
+from .titles import context_title
 
 MAX_TRANSCRIPT_CHARS = 24_000  # keeps the prompt under free-tier token limits
 FALLBACK_SECONDS = 300
@@ -213,6 +214,6 @@ def _fixed_sections(chunks: list[Chunk]) -> list[Section]:
     start, end = chunks[0].start, chunks[-1].end
     sections, t = [], start
     while t < end:
-        sections.append(Section(title=f"Part {len(sections) + 1}", start=t, end=min(t + FALLBACK_SECONDS, end)))
+        sections.append(Section(title=context_title([c for c in chunks if c.start < t + FALLBACK_SECONDS and c.end > t]), start=t, end=min(t + FALLBACK_SECONDS, end)))
         t += FALLBACK_SECONDS
     return sections

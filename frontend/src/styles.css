@@ -558,3 +558,15 @@ p {
     animation-duration: 2.4s;
   }
 }
+
+.answer-citations {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.answer-citations .answer-timestamp {
+  text-align: left;
+  white-space: normal;
+}

@@ -12,9 +12,10 @@ from ..ingestion import store
 from ..ingestion.timing import source_id
 from ..schemas import Chunk
 from . import llm, retrieval, sections
+from .titles import descriptive_title
 
 log = logging.getLogger(__name__)
-REVISION = "1"
+REVISION = "2"
 TEXT_LIMIT = 600
 _locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 _locks_guard = threading.Lock()
@@ -63,7 +64,7 @@ def build(lecture_id: str, *, options: Options | None = None, refine: bool = Tru
 
 def _index(lecture_id, sentences, starts, titles=None):
     ends = starts[1:] + [len(sentences)]
-    drafts = [sections.SectionDraft(title=titles[i] if titles else f"Part {i + 1}",
+    drafts = [sections.SectionDraft(title=descriptive_title(titles[i] if titles else None, sentences[a:b]),
                                    sentence_ids=[source_id(s) for s in sentences[a:b]])
               for i, (a, b) in enumerate(zip(starts, ends))]
     return sections.build_index(lecture_id, sentences, drafts)
