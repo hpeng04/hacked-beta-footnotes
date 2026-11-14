@@ -23,8 +23,8 @@ class FakeWhisper:
         return (s for s in self.segments), SimpleNamespace(language="en")
 
 
-def seg(start, end, text):
-    return SimpleNamespace(start=start, end=end, text=text)
+def seg(start, end, text, words=None):
+    return SimpleNamespace(start=start, end=end, text=text, words=words)
 
 
 @pytest.fixture
@@ -80,8 +80,8 @@ def test_missing_video(whisper, tmp_path):
 @needs_ffmpeg
 def test_transcribe_returns_clean_segments(whisper, video):
     assert t.transcribe(video) == [
-        {"start": 0.0, "end": 4.5, "text": "Hello there."},
-        {"start": 6.0, "end": 9.25, "text": "Second line."},
+        {"start": 0.0, "end": 4.5, "text": "Hello there.", "words": []},
+        {"start": 6.0, "end": 9.25, "text": "Second line.", "words": []},
     ]
 
 
@@ -89,8 +89,20 @@ def test_transcribe_returns_clean_segments(whisper, video):
 def test_transcribe_cleans_up_the_wav(whisper, video):
     t.transcribe(video)
     (path, kwargs, existed), = whisper.calls
-    assert existed and kwargs == {"vad_filter": True, "batch_size": config.WHISPER_BATCH_SIZE, "beam_size": config.WHISPER_BEAM_SIZE}
+    assert existed and kwargs == {"vad_filter": True, "word_timestamps": True,
+                                  "batch_size": config.WHISPER_BATCH_SIZE, "beam_size": config.WHISPER_BEAM_SIZE}
     assert not Path(path).exists()
+
+
+@needs_ffmpeg
+def test_word_alignment_survives_transcription(whisper, video):
+    whisper.segments = [seg(110.66, 115.26, " the type. Then we can allocate.", [
+        SimpleNamespace(start=110.66, end=111.0, word=" the type."),
+        SimpleNamespace(start=111.3, end=111.64, word=" Then we can"),
+        SimpleNamespace(start=111.64, end=111.96, word=" allocate."),
+    ])]
+    result = t.transcribe(video)
+    assert result[0]["words"][2] == {"start": 111.64, "end": 111.96, "word": " allocate."}
 
 
 @needs_ffmpeg
@@ -164,9 +176,19 @@ def groq(monkeypatch):
 
 @needs_ffmpeg
 def test_groq_used_when_key_set(groq, whisper, video):
-    fake = groq({"segments": [{"start": 0, "end": 2.5, "text": " Hi. "}, {"start": 2.5, "end": 3, "text": " "}]})
-    assert t.transcribe(video) == [{"start": 0.0, "end": 2.5, "text": "Hi."}]
+    fake = groq({
+        "segments": [{"start": 0, "end": 1, "text": " Hi there. "}, {"start": 1, "end": 2.5, "text": " Bye."},
+                     {"start": 2.5, "end": 3, "text": " "}],
+        "words": [{"word": "Hi", "start": 0, "end": 0.4}, {"word": "there.", "start": 0.4, "end": 0.9},
+                  {"word": "Bye.", "start": 1.2, "end": 2}],
+    })
+    assert t.transcribe(video) == [
+        {"start": 0.0, "end": 1.0, "text": "Hi there.", "words": [
+            {"start": 0.0, "end": 0.4, "word": " Hi"}, {"start": 0.4, "end": 0.9, "word": " there."}]},
+        {"start": 1.0, "end": 2.5, "text": "Bye.", "words": [{"start": 1.2, "end": 2.0, "word": " Bye."}]},
+    ]
     (call,) = fake.calls
+    assert call["data"]["timestamp_granularities[]"] == ["word", "segment"]
     assert call["headers"] == {"Authorization": "Bearer gsk-test"}
     assert call["data"]["model"] == config.GROQ_WHISPER_MODEL and call["data"]["response_format"] == "verbose_json"
     assert call["mime"] == "audio/mpeg" and 0 < call["bytes"] < 50_000  # 2 s at 32 kbps

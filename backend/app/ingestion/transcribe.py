@@ -42,10 +42,32 @@ def _compress_audio(video_path: Path, mp3_path: Path) -> None:
 
 def _clean(segments) -> list[dict]:
     return [
-        {"start": float(s["start"]), "end": float(s["end"]), "text": s["text"].strip()}
+        {
+            "start": float(s["start"]), "end": float(s["end"]), "text": s["text"].strip(),
+            "words": [
+                {"start": float(w["start"]), "end": float(w["end"]), "word": w["word"]}
+                for w in s.get("words") or []
+            ],
+        }
         for s in segments
         if s["text"].strip()
     ]
+
+
+def _attach_words(segments: list[dict], words: list[dict]) -> list[dict]:
+    """Groq returns one flat word list: give each word to the segment containing its midpoint.
+
+    Words get faster-whisper's leading space so they join back into the segment text.
+    """
+    out = [{**s, "words": []} for s in segments]
+    i = 0
+    for w in words:
+        mid = (float(w["start"]) + float(w["end"])) / 2
+        while i < len(out) - 1 and mid >= float(out[i]["end"]):
+            i += 1
+        if out:
+            out[i]["words"].append({**w, "word": " " + w["word"].strip()})
+    return out
 
 
 def _transcribe_groq(video_path: Path, tmp: Path) -> list[dict]:
@@ -58,12 +80,14 @@ def _transcribe_groq(video_path: Path, tmp: Path) -> list[dict]:
         r = httpx.post(
             GROQ_URL,
             headers={"Authorization": f"Bearer {config.GROQ_WHISPER_API_KEY}"},
-            data={"model": config.GROQ_WHISPER_MODEL, "response_format": "verbose_json", "temperature": "0"},
+            data={"model": config.GROQ_WHISPER_MODEL, "response_format": "verbose_json", "temperature": "0",
+                  "timestamp_granularities[]": ["word", "segment"]},
             files={"file": ("audio.mp3", f, "audio/mpeg")},
             timeout=GROQ_TIMEOUT,
         )
     r.raise_for_status()
-    return _clean(r.json()["segments"])
+    body = r.json()
+    return _clean(_attach_words(body["segments"], body.get("words") or []))
 
 
 @lru_cache(maxsize=1)
@@ -80,15 +104,20 @@ def _transcribe_local(video_path: Path, tmp: Path) -> list[dict]:
     segments, _info = _whisper().transcribe(
         str(wav_path),
         vad_filter=True,
+        word_timestamps=True,
         batch_size=config.WHISPER_BATCH_SIZE,
         beam_size=config.WHISPER_BEAM_SIZE,
     )
     # segments is a generator: transcription happens here, while the wav still exists
-    return _clean({"start": s.start, "end": s.end, "text": s.text} for s in segments)
+    return _clean(
+        {"start": s.start, "end": s.end, "text": s.text,
+         "words": [{"start": w.start, "end": w.end, "word": w.word} for w in (s.words or [])]}
+        for s in segments
+    )
 
 
 def transcribe(video_path: Path) -> list[dict]:
-    """Return Whisper segments as [{"start": float, "end": float, "text": str}]."""
+    """Return segments and word alignment in the original audio's time coordinates."""
     video_path = Path(video_path)
     if not video_path.exists():
         raise FileNotFoundError(video_path)

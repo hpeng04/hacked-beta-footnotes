@@ -52,7 +52,7 @@ class StubWhisperModel:
     def __init__(self, name, device=None, compute_type=None):
         self.loaded.append((name, device, compute_type))
 
-    def transcribe(self, path, vad_filter=False, **_kwargs):
+    def transcribe(self, path, vad_filter=False, word_timestamps=False, **_kwargs):
         with wave.open(path) as w:
             self.heard.append({
                 "channels": w.getnchannels(),
@@ -61,7 +61,8 @@ class StubWhisperModel:
                 "vad_filter": vad_filter,
             })
         script = self.scripts.pop(0)
-        return (SimpleNamespace(start=s, end=e, text=t) for s, e, t in script), SimpleNamespace(language="en")
+        assert word_timestamps
+        return (SimpleNamespace(start=s, end=e, text=t, words=[]) for s, e, t in script), SimpleNamespace(language="en")
 
 
 @pytest.fixture
@@ -139,7 +140,6 @@ BIO_SCRIPT = [
     (0.0, 20.0, " Photosynthesis turns light into chemical energy."),
     (20.0, 45.0, " Chlorophyll absorbs red and blue light."),
 ]
-OS_TIMELINE_REPLY = '{"sections": [{"title": "Intro", "start": 0}, {"title": "Deadlock", "start": 31}, {"title": "Semaphores", "start": 64}]}'
 
 
 def segments(script):

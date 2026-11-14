@@ -88,7 +88,15 @@ cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE
 cd backend && .venv/bin/python -m scripts.build_timelines LECTURE_ID
 ```
 
-Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`. Give demo lectures a named id such as `os-lecture`: cache files of live uploads (ids of 8 hex characters) are git-ignored.
+Then commit `data/cache/LECTURE_ID.transcript.json`, `data/cache/LECTURE_ID.segments.json`, and `data/cache/LECTURE_ID.timeline.json`. Give demo lectures a named id such as `os-lecture`: cache files of live uploads (ids of 8 hex characters) are git-ignored.
+
+Search uses merged chunks for context. Whisper runs locally with `word_timestamps=True`; its versioned `*.segments.json` cache preserves word alignment. Answers and topic timelines use sentence excerpts built from those words, including sentences spanning Whisper segments. Silence and long unpunctuated speech also bound excerpts. Word timing is a model estimate, not frame-exact visual alignment.
+
+For an older recording with missing word timing, its first question or timeline request recovers alignment from the saved video once, which can take time on CPU. This leaves its searchable transcript and vector index unchanged. Portable transcripts without a recording retain their available segment/chunk timing; the app does not interpolate word times from text.
+
+The LLM selects stable excerpt IDs. The backend validates those IDs and supplies the stored float timestamps; it does not move citations using keyword overlap. Invalid replies and provider failures produce a retry message without a transcript dump. Nearby citations from a continuous passage are combined into one replay point: starts must be within 10 seconds of the first citation, with no gap over two seconds between cited excerpts. Consecutive answer sentences sharing that passage display one timestamp. Separate passages keep separate links, and replay uses the original float start time.
+
+Timeline caches record a format version and a fingerprint of their excerpts. Old caches and changed timing are regenerated automatically when the transcript is available. Long timelines use multiple requests, each with at most 24,000 transcript characters, to retain sentence anchors within free-tier prompt limits. Results are cached only after all requests succeed. `scripts.build_timelines` also upgrades stale caches.
 
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 
@@ -112,7 +120,7 @@ Live uploads use `WHISPER_MODEL` from `.env` (`base` in `.env.example`); `--mode
 
 - Semantic search endpoint
 - Q&A (RAG) returning answers with timestamps
-- Topic timeline: one LLM call that splits the transcript into sections
+- Topic timeline: select sentence boundaries with bounded LLM requests
 - Cache timeline results for the demo lectures
 
 ### Person 3 — Frontend
@@ -141,10 +149,12 @@ API:
 | `GET /status?lecture_id=` | Person 1 | `lecture_id`, `status` (`processing`, `ready` or `failed`), `error` |
 | `GET /transcript?lecture_id=` | Person 1 | all chunks |
 | `GET /search?lecture_id=&q=` | Person 2 | matching chunks |
-| `POST /ask` | Person 2 | answer plus the chunks it cites |
+| `POST /ask` | Person 2 | `answer`, cited `sources`, and `sentences` as `{text, sources}` |
 | `GET /timeline?lecture_id=` | Person 2 | sections as `{title, start, end}` |
 
 `POST /upload` returns at once and transcribes in the background. Poll `GET /status` until it says `ready` before loading the transcript, timeline or search; on `failed`, show `error`.
+
+`answer` remains a readable string with timestamp labels. `sentences` is an additive field: clients should render each sentence's citation buttons from its own sources, seeking to `source.start` without rounding. The top-level `sources` contains only cited excerpts, not every retrieval candidate.
 
 Person 1 hands over one hand-made transcript JSON right away, so Persons 2 and 3 can build against mock data.
 

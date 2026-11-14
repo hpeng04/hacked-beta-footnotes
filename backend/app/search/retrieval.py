@@ -2,7 +2,8 @@
 import re
 
 from .. import mock
-from ..ingestion import store
+from ..ingestion import pipeline, store
+from ..ingestion.timing import sentence_excerpts
 from ..schemas import Chunk
 
 
@@ -13,6 +14,24 @@ def search(lecture_id: str, query: str, k: int = 5) -> list[Chunk]:
         hits = []
     # Empty also covers lectures that only exist as mock data (e.g. "demo")
     return hits or _keyword_search(lecture_id, query, k)
+
+
+def answer_sources(lecture_id: str, candidates: list[Chunk]) -> list[Chunk]:
+    """Use aligned sentences to cite passages inside retrieved search chunks."""
+    if not candidates:
+        return []
+    segments = pipeline.citation_timing(lecture_id)
+    if segments is None:
+        return candidates
+    # Preserve retrieval rank for provider-failure fallback; avoid duplicating a
+    # segment when overlapping candidate chunks include the same passage.
+    excerpts = sentence_excerpts(segments)
+    selected = {}
+    for candidate in candidates:
+        for segment in excerpts:
+            if segment.start < candidate.end and segment.end > candidate.start:
+                selected.setdefault((segment.start, segment.end), segment)
+    return list(selected.values())
 
 
 def transcript(lecture_id: str) -> list[Chunk]:
@@ -26,6 +45,11 @@ def transcript(lecture_id: str) -> list[Chunk]:
         except NotImplementedError:
             pass
     return sorted(chunks or mock.load_chunks(lecture_id), key=lambda c: c.start)
+
+
+def timeline_sources(lecture_id: str) -> list[Chunk] | None:
+    segments = pipeline.citation_timing(lecture_id)
+    return sentence_excerpts(segments) if segments is not None else (transcript(lecture_id) or None)
 
 
 STOPWORDS = set("""a an and are as at be by can do does for from how i in is it of on or so that the

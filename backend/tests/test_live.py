@@ -103,7 +103,7 @@ OFF_TOPIC = [(lid, i["q"]) for lid in LECTURES for i in QUESTIONS[lid] if i["exp
 def test_answer_cites_expected_chunk(target, lecture_id, question, expect_start):
     sources = _sources(lecture_id, question, expect_start)
     reply = llm.answer(question, sources)
-    assert reply != f"[{llm.fmt_time(sources[0].start)}] {sources[0].text}", "LLM failed, got fallback answer"
+    assert reply != llm.UNAVAILABLE, "LLM failed, got fallback answer"
     assert f"[{llm.fmt_time(expect_start)}]" in reply, reply
     cited = set(CITATION.findall(reply))
     allowed = {f"[{llm.fmt_time(c.start)}]" for c in sources}
