@@ -30,4 +30,10 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")  # empty = provider default
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_BACKUP_PROVIDER = os.getenv("LLM_BACKUP_PROVIDER", "ollama")  # empty = no backup
 LLM_BACKUP_MODEL = os.getenv("LLM_BACKUP_MODEL", "")
+
+# Groq's hosted Whisper (free tier); empty key = local faster-whisper only.
+# Reuses the LLM key when the LLM provider is Groq.
+GROQ_WHISPER_API_KEY = os.getenv("GROQ_WHISPER_API_KEY") or (LLM_API_KEY if LLM_PROVIDER == "groq" else "")
+GROQ_WHISPER_MODEL = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
+GROQ_WHISPER_MAX_BYTES = 25 * 1024 * 1024  # free-tier upload limit
 LLM_BACKUP_API_KEY = os.getenv("LLM_BACKUP_API_KEY", "")

@@ -132,3 +132,68 @@ def test_whisper_is_loaded_once_from_config(monkeypatch):
         assert isinstance(t._whisper(), FakePipeline)
     finally:
         t._whisper.cache_clear()
+
+
+# --- Groq Whisper with local fallback ---
+
+class FakeGroq:
+    def __init__(self, reply):
+        self.reply, self.calls = reply, []
+
+    def __call__(self, url, headers, data, files, timeout):
+        name, f, mime = files["file"]
+        self.calls.append({"url": url, "headers": headers, "data": data, "mime": mime, "bytes": len(f.read())})
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        resp = SimpleNamespace(raise_for_status=lambda: None, json=lambda: self.reply)
+        return resp
+
+
+@pytest.fixture
+def groq(monkeypatch):
+    import httpx
+
+    def use(reply):
+        fake = FakeGroq(reply)
+        monkeypatch.setattr(config, "GROQ_WHISPER_API_KEY", "gsk-test")
+        monkeypatch.setattr(httpx, "post", fake)
+        return fake
+
+    return use
+
+
+@needs_ffmpeg
+def test_groq_used_when_key_set(groq, whisper, video):
+    fake = groq({"segments": [{"start": 0, "end": 2.5, "text": " Hi. "}, {"start": 2.5, "end": 3, "text": " "}]})
+    assert t.transcribe(video) == [{"start": 0.0, "end": 2.5, "text": "Hi."}]
+    (call,) = fake.calls
+    assert call["headers"] == {"Authorization": "Bearer gsk-test"}
+    assert call["data"]["model"] == config.GROQ_WHISPER_MODEL and call["data"]["response_format"] == "verbose_json"
+    assert call["mime"] == "audio/mpeg" and 0 < call["bytes"] < 50_000  # 2 s at 32 kbps
+    assert whisper.calls == []
+
+
+@needs_ffmpeg
+def test_falls_back_to_local_when_groq_fails(groq, whisper, video):
+    import httpx
+
+    groq(httpx.ConnectError("down"))
+    assert [s["text"] for s in t.transcribe(video)] == ["Hello there.", "Second line."]
+    assert len(whisper.calls) == 1
+
+
+@needs_ffmpeg
+def test_falls_back_to_local_when_audio_too_big(groq, whisper, video, monkeypatch):
+    fake = groq({"segments": []})
+    monkeypatch.setattr(config, "GROQ_WHISPER_MAX_BYTES", 10)
+    assert len(t.transcribe(video)) == 2
+    assert fake.calls == [] and len(whisper.calls) == 1
+
+
+def test_no_key_skips_groq(whisper, monkeypatch, tmp_path):
+    called = []
+    monkeypatch.setattr(t, "_transcribe_groq", lambda *a: called.append(a))
+    monkeypatch.setattr(t, "_transcribe_local", lambda *a: [])
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    assert t.transcribe(video) == [] and called == []
