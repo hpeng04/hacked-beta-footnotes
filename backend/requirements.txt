@@ -5,6 +5,7 @@ python-dotenv
 
 # Person 1: ingestion
 faster-whisper
+av<19  # faster-whisper 1.2.1 passes metadata_errors to av.open, removed in PyAV 19
 sentence-transformers
 chromadb
 
