@@ -52,7 +52,7 @@ class StubWhisperModel:
     def __init__(self, name, device=None, compute_type=None):
         self.loaded.append((name, device, compute_type))
 
-    def transcribe(self, path, vad_filter=False, word_timestamps=False):
+    def transcribe(self, path, vad_filter=False, word_timestamps=False, **_kwargs):
         with wave.open(path) as w:
             self.heard.append({
                 "channels": w.getnchannels(),
@@ -73,7 +73,9 @@ def stub_models(monkeypatch):
     StubWhisperModel.scripts, StubWhisperModel.heard = [], []
     monkeypatch.setattr(config, "WHISPER_MODEL", config.WHISPER_MODEL)  # scripts' --model must not leak
     monkeypatch.setitem(sys.modules, "sentence_transformers", types.SimpleNamespace(SentenceTransformer=StubSentenceTransformer))
-    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=StubWhisperModel))
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(
+        WhisperModel=StubWhisperModel, BatchedInferencePipeline=lambda model: model,  # stub transcribes itself
+    ))
     store._model.cache_clear()
     transcribe._whisper.cache_clear()
     yield SimpleNamespace(whisper=StubWhisperModel, embedder=StubSentenceTransformer)
