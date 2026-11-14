@@ -138,7 +138,6 @@ BIO_SCRIPT = [
     (0.0, 20.0, " Photosynthesis turns light into chemical energy."),
     (20.0, 45.0, " Chlorophyll absorbs red and blue light."),
 ]
-OS_TIMELINE_REPLY = '{"sections": [{"title": "Intro", "start": 0}, {"title": "Deadlock", "start": 31}, {"title": "Semaphores", "start": 64}]}'
 
 
 def segments(script):

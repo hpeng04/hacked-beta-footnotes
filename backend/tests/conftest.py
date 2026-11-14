@@ -27,6 +27,11 @@ class FakeLLM:
             for text, sources in sentences
         ]}))
 
+    def reply_timeline(self, host, *sections):
+        self.reply(host, json.dumps({"sections": [
+            {"title": title, "start_id": source_id(source)} for title, source in sections
+        ]}))
+
     def __call__(self, url, json, headers, timeout):
         self.calls.append({"url": url, "json": json, "headers": headers})
         for host, queue in self.replies.items():

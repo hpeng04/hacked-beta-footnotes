@@ -34,7 +34,7 @@ def run_timeline(lecture_id: str) -> bool:
 def run_question(lecture_id: str, q: str, expect_start: float | None) -> bool:
     sources = retrieval.search(lecture_id, q)
     reply = llm.answer(q, sources)
-    if sources and reply == f"[{llm.fmt_time(sources[0].start)}] {sources[0].text}":
+    if reply == llm.UNAVAILABLE:
         print(f"  FAIL  {q}\n        LLM unavailable, got fallback answer")
         return False
     if expect_start is None:

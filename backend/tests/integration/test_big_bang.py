@@ -13,7 +13,7 @@ from app import config
 from app.ingestion import pipeline, store, transcribe
 from scripts import build_timelines, preprocess
 
-from .conftest import BIO_SCRIPT, OS_CHUNKS, OS_SCRIPT, OS_TIMELINE_REPLY, SPEECH, get, needs_ffmpeg, post_video
+from .conftest import BIO_SCRIPT, OS_CHUNKS, OS_SCRIPT, SPEECH, get, needs_ffmpeg, post_video
 
 pytestmark = needs_ffmpeg
 
@@ -46,7 +46,7 @@ def test_full_lecture_journey(client, stub_models, clip, fake_llm):
     }
     assert all(any(c["start"] <= s["start"] < s["end"] <= c["end"] for c in transcript) for s in answer["sources"])
 
-    fake_llm.reply("groq", OS_TIMELINE_REPLY)
+    queue_os_timeline(fake_llm, lecture_id)
     sections = get(client, "/timeline", lecture_id).json()
     assert [s["title"] for s in sections] == ["Intro", "Deadlock", "Semaphores"]
     assert sections[0]["start"] == transcript[0]["start"] and sections[-1]["end"] == transcript[-1]["end"]
@@ -101,7 +101,7 @@ def test_preprocessed_demo_lecture_is_served_by_the_api(client, stub_models, cli
     """The demo workflow: scripts.preprocess, then scripts.build_timelines, then the app."""
     stub_models.whisper.scripts.append(OS_SCRIPT)
     assert preprocess.main([str(clip.path), "os-lecture", "--model", "small"]) == 0
-    fake_llm.reply("groq", OS_TIMELINE_REPLY)
+    queue_os_timeline(fake_llm, "os-lecture")
     assert build_timelines.main(["os-lecture"]) == 0
     llm_calls = len(fake_llm.calls)
 
@@ -144,12 +144,12 @@ def test_reprocessing_a_lecture_replaces_it(client, stub_models, clip):
 def test_reprocessing_a_lecture_rebuilds_its_timeline(client, stub_models, clip, fake_llm):
     stub_models.whisper.scripts += [OS_SCRIPT, BIO_SCRIPT]
     preprocess.main([str(clip.path), "lec"])
-    fake_llm.reply("groq", OS_TIMELINE_REPLY)
+    queue_os_timeline(fake_llm, "lec")
     assert build_timelines.main(["lec"]) == 0
     assert get(client, "/timeline", "lec").json()[-1]["end"] == 80.0
 
     assert preprocess.main([str(clip.path), "lec", "--force"]) == 0
-    fake_llm.reply("groq", '{"sections": [{"title": "Photosynthesis", "start": 0}]}')
+    fake_llm.reply_timeline("groq", ("Photosynthesis", pipeline.load_segments("lec")[0]))
     assert build_timelines.main(["lec"]) == 0  # not "cached, skipped": the old timeline is gone
     assert get(client, "/timeline", "lec").json() == [{"title": "Photosynthesis", "start": 0.0, "end": 45.0}]
 
@@ -196,3 +196,8 @@ def test_real_models_end_to_end(client, clip, fake_llm):
 
     hits = get(client, "/search", lecture_id, q="threads stuck waiting for each other").json()
     assert hits and hits[0] in transcript
+
+
+def queue_os_timeline(fake_llm, lecture_id):
+    sources = {c.start: c for c in pipeline.load_segments(lecture_id)}
+    fake_llm.reply_timeline("groq", *((title, sources[start]) for title, start in [("Intro", 0), ("Deadlock", 31), ("Semaphores", 64)]))

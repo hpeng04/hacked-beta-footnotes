@@ -41,10 +41,10 @@ def test_keyword_retrieval_finds_most_expected_chunks():
 def test_live_script_passes_with_good_llm(fake_llm, capsys):
     lid = "os-scheduling"
     items = QUESTIONS[lid]
-    fake_llm.reply("groq", json.dumps({"sections": [{"title": "Intro", "start": 0}]}))
+    fake_llm.reply_timeline("groq", ("Intro", mock.load_chunks(lid)[0]))
     for item in items:
-        cite = "" if item["expect_start"] is None else f" [{live_llm_test.llm.fmt_time(item['expect_start'])}]"
-        fake_llm.reply("groq", "Answer." + cite if cite else "The lecture does not cover that.")
+        sources = [] if item["expect_start"] is None else [next(c for c in mock.load_chunks(lid) if c.start == item["expect_start"])]
+        fake_llm.reply_answer("groq", *(("Answer.", sources),) if sources else ())
     assert live_llm_test.main([lid]) == 0
     assert f"{len(items) + 1}/{len(items) + 1} passed" in capsys.readouterr().out
 

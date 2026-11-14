@@ -47,6 +47,11 @@ def transcript(lecture_id: str) -> list[Chunk]:
     return sorted(chunks or mock.load_chunks(lecture_id), key=lambda c: c.start)
 
 
+def timeline_sources(lecture_id: str) -> list[Chunk] | None:
+    segments = pipeline.citation_timing(lecture_id)
+    return sentence_excerpts(segments) if segments is not None else (transcript(lecture_id) or None)
+
+
 STOPWORDS = set("""a an and are as at be by can do does for from how i in is it of on or so that the
 this to was what when where which who why with you""".split())
 

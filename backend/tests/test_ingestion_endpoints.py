@@ -79,7 +79,7 @@ def test_uploaded_lecture_becomes_searchable(client, fake_models, fake_llm):
     hits = client.get("/search", params={"lecture_id": lecture_id, "q": "deadlock"}).json()
     assert hits[0]["text"] == "Deadlock needs circular wait."
 
-    fake_llm.reply("groq", "It needs circular wait.")
+    fake_llm.reply_answer("groq", ("It needs circular wait.", [pipeline.load_segments(lecture_id)[1]]))
     answer = client.post("/ask", json={"lecture_id": lecture_id, "question": "what causes deadlock?"}).json()
     assert answer["sources"][0]["start"] == 31.0
 
