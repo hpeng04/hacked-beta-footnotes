@@ -1,0 +1,8 @@
+# Light deps for CI: no Whisper, torch or Chroma. Tests fake the LLM and use mock data.
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+httpx
+pytest
+ruff
