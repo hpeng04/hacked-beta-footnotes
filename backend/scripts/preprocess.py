@@ -31,6 +31,13 @@ from app.search.llm import fmt_time
 SUFFIX = ".transcript.json"
 
 
+def _stored_videos(lecture_id: str) -> list[Path]:
+    """Media stored for a lecture, whatever its extension."""
+    if not config.UPLOAD_DIR.is_dir():
+        return []
+    return sorted(p for p in config.UPLOAD_DIR.iterdir() if p.is_file() and p.stem == lecture_id)
+
+
 def preprocess(video: Path, lecture_id: str, force: bool) -> int:
     if not config.is_valid_lecture_id(lecture_id):
         print(f"{lecture_id}: FAILED (invalid id: use letters, digits, - and _)")
@@ -40,13 +47,17 @@ def preprocess(video: Path, lecture_id: str, force: bool) -> int:
         return 1
 
     target = config.UPLOAD_DIR / f"{lecture_id}{video.suffix}"
+    stored = _stored_videos(lecture_id)  # whatever the extension
     cached = pipeline.transcript_path(lecture_id)
     if cached.exists() and not force:
         # The cached transcript belongs to the stored video: never pair it with another one.
-        if target.exists() and not filecmp.cmp(video, target, shallow=False):
+        same = [p for p in stored if filecmp.cmp(video, p, shallow=False)]
+        if stored and not same:
             print(f"{lecture_id}: FAILED (a different video is already processed under this id: "
                   "use --force to replace it, or another id)")
             return 1
+        if same:
+            target = same[0]
         print(f"{lecture_id}: transcript cached, only re-indexing (use --force to transcribe again)")
 
     # With --force the new video is transcribed from where it is, and replaces the stored
@@ -62,8 +73,12 @@ def preprocess(video: Path, lecture_id: str, force: bool) -> int:
     except Exception as e:
         print(f"{lecture_id}: FAILED ({e})")
         return 1
-    if force and video.resolve() != target.resolve():
-        shutil.copyfile(video, target)
+    if force:
+        if video.resolve() != target.resolve():
+            shutil.copyfile(video, target)
+        for old in stored:  # e.g. the previous .mp4 when the new video is a .webm
+            if old.resolve() != target.resolve():
+                old.unlink()
 
     print(f"{lecture_id}: {len(chunks)} chunks in {time.monotonic() - started:.0f}s -> {cached}")
     for c in chunks[:5]:

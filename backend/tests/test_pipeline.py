@@ -189,3 +189,28 @@ def test_first_transcript_drops_a_leftover_timeline(fakes):
     timeline = write_timeline()
     pipeline.ingest(Path("video.mp4"), "lec")
     assert not timeline.exists()
+
+
+def test_failed_indexing_of_a_forced_run_keeps_transcript_and_timeline(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    timeline = write_timeline()
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: SEGMENTS[:1])
+
+    def boom(chunks):
+        raise RuntimeError("embedding failed")
+
+    monkeypatch.setattr(pipeline.store, "add_chunks", boom)
+    with pytest.raises(RuntimeError):
+        pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert pipeline.load_transcript("lec") == CHUNKS
+    assert timeline.exists()
+
+
+def test_forced_run_indexes_before_it_replaces_the_cache(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: SEGMENTS[:1])
+    seen = []
+    monkeypatch.setattr(pipeline.store, "add_chunks", lambda chunks: seen.append(pipeline.load_transcript("lec")))
+    pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert seen == [CHUNKS]  # the old transcript was still cached while indexing ran
+    assert len(pipeline.load_transcript("lec")) == 1

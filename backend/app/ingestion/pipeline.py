@@ -55,22 +55,33 @@ def set_status(lecture_id: str, status: str, error: str | None = None) -> None:
     _write_json(status_path(lecture_id), {"status": status, **({"error": error} if error else {})})
 
 
+def _save_transcript(lecture_id: str, chunks: list[Chunk], previous: list[Chunk] | None) -> None:
+    _write_json(transcript_path(lecture_id), [c.model_dump() for c in chunks])
+    if chunks != previous:  # the cached timeline describes the old transcript
+        _path(lecture_id, "timeline").unlink(missing_ok=True)
+
+
 def ingest(video_path: Path, lecture_id: str, force: bool = False) -> list[Chunk]:
     """Transcribe, chunk and index a lecture. A cached transcript skips Whisper and is only re-indexed.
 
-    force transcribes again even if cached; the old transcript stays until the new one is written.
+    force transcribes again even if cached. The old transcript and timeline stay until the new
+    chunks are indexed, so a failed replacement leaves the lecture as it was.
     Records progress in the status file; on failure stores the error there and re-raises.
     """
     set_status(lecture_id, PROCESSING)  # also validates the id before anything else is written
     try:
         cached = load_transcript(lecture_id)
-        chunks = cached
-        if chunks is None or force:
+        if cached is not None and not force:
+            chunks = cached
+            store.add_chunks(chunks)
+        else:
             chunks = chunk_segments(lecture_id, transcribe(Path(video_path)))
-            _write_json(transcript_path(lecture_id), [c.model_dump() for c in chunks])
-            if chunks != cached:  # the cached timeline describes the old transcript
-                _path(lecture_id, "timeline").unlink(missing_ok=True)
-        store.add_chunks(chunks)
+            if cached is None:  # nothing to protect: cache first, so a retry skips Whisper
+                _save_transcript(lecture_id, chunks, cached)
+                store.add_chunks(chunks)
+            else:  # replacing a working lecture: touch its cache only once indexing worked
+                store.add_chunks(chunks)
+                _save_transcript(lecture_id, chunks, cached)
     except Exception as e:
         set_status(lecture_id, FAILED, str(e) or type(e).__name__)
         raise

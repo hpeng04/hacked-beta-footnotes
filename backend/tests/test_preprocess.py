@@ -103,6 +103,62 @@ def test_cached_transcript_without_a_stored_video_accepts_the_video(whisper, vid
     assert len(whisper) == 1
 
 
+def test_different_video_with_another_extension_needs_force(whisper, video, tmp_path, capsys):
+    preprocess.main([str(video), "ml-lecture"])
+    other = tmp_path / "other.webm"
+    other.write_bytes(b"another video")
+    assert preprocess.main([str(other), "ml-lecture"]) == 1
+    assert "different video" in capsys.readouterr().out
+    assert sorted(p.name for p in config.UPLOAD_DIR.iterdir()) == ["ml-lecture.mp4"]
+    assert len(whisper) == 1
+
+
+def test_same_video_with_another_extension_reuses_the_stored_one(whisper, video, tmp_path, capsys):
+    preprocess.main([str(video), "ml-lecture"])
+    renamed = tmp_path / "copy.webm"
+    renamed.write_bytes(b"video")
+    assert preprocess.main([str(renamed), "ml-lecture"]) == 0
+    assert sorted(p.name for p in config.UPLOAD_DIR.iterdir()) == ["ml-lecture.mp4"]
+    assert "/media/ml-lecture.mp4" in capsys.readouterr().out
+
+
+def test_force_with_another_extension_leaves_one_video(whisper, video, tmp_path, capsys):
+    preprocess.main([str(video), "ml-lecture"])
+    other = tmp_path / "other.webm"
+    other.write_bytes(b"another video")
+    assert preprocess.main([str(other), "ml-lecture", "--force"]) == 0
+    assert {p.name: p.read_bytes() for p in config.UPLOAD_DIR.iterdir()} == {"ml-lecture.webm": b"another video"}
+    assert "/media/ml-lecture.webm" in capsys.readouterr().out
+
+
+def test_other_lectures_videos_are_not_mistaken_for_this_one(whisper, video, tmp_path):
+    preprocess.main([str(video), "ml-lecture"])
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"another video")
+    assert preprocess.main([str(other), "ml-lecture-2"]) == 0
+    assert preprocess.main([str(other), "ml-lecture-2", "--force"]) == 0
+    assert (config.UPLOAD_DIR / "ml-lecture.mp4").read_bytes() == b"video"
+
+
+def test_failed_indexing_on_force_keeps_the_working_lecture(whisper, video, tmp_path, monkeypatch):
+    preprocess.main([str(video), "ml-lecture"])
+    timeline = config.CACHE_DIR / "ml-lecture.timeline.json"
+    timeline.write_text("[]")
+    other = tmp_path / "other.webm"
+    other.write_bytes(b"another video")
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: SEGMENTS[:1])
+
+    def boom(texts):
+        raise RuntimeError("embedding failed")
+
+    monkeypatch.setattr(store, "_embed", boom)
+    assert preprocess.main([str(other), "ml-lecture", "--force"]) == 1
+    assert len(pipeline.load_transcript("ml-lecture")) == 2
+    assert timeline.exists()
+    assert sorted(p.name for p in config.UPLOAD_DIR.iterdir()) == ["ml-lecture.mp4"]
+    assert len(store.get_chunks("ml-lecture")) == 2
+
+
 def test_video_already_in_uploads_is_not_copied_onto_itself(whisper):
     config.UPLOAD_DIR.mkdir(parents=True)
     target = config.UPLOAD_DIR / "lec.mp4"
