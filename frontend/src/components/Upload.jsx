@@ -12,7 +12,6 @@ export default function Upload({ onUploaded, buttonLabel }) {
     try {
       const uploadedLecture = await upload(file);
       onUploaded({ ...uploadedLecture, filename: file.name });
-      onUploaded({ ...uploadedLecture, filename: file.name });
       setStatus("Uploaded");
     } catch (err) {
       setStatus(err.message);

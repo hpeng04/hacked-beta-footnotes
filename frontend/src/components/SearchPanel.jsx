@@ -39,6 +39,11 @@ export default function SearchPanel({ lectureId, onSeek }) {
             <p className="answer-question">{askedQuestion}</p>
             <p>{result.answer}</p>
           </div>
+
+          {result.sources.length > 0 && (
+            <h3 className="source-heading">From the transcript</h3>
+          )}
+
           <ul>
             {result.sources.map((c) => (
               <li key={c.start}>

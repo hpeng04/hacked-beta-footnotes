@@ -62,7 +62,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 }
 
 body {
-  background: #f0eee8;
+  background: #f5f5f0;
 }
 
 .layout {
@@ -411,4 +411,96 @@ body {
   color: var(--ink);
   font: inherit;
   cursor: pointer;
+}
+
+.timestamp-app {
+  --surface: #ffffff;
+  --border: #dce3dc;
+  --ink: #182522;
+  --muted: #53645e;
+  --accent: #195c49;
+  --mint: #deeee5;
+}
+
+.timestamp-lesson h2 {
+  overflow-wrap: anywhere;
+}
+
+.timestamp-player,
+.timestamp-player video {
+  background: #111b1c;
+}
+
+.timestamp-upload {
+  background: radial-gradient(
+    ellipse at top right,
+    #2b5d52,
+    #172f2d 58%,
+    #122322
+  );
+}
+
+.timestamp-qa .answer-note {
+  margin-top: 0;
+  border-top-color: var(--border);
+}
+
+.timestamp-qa .panel li {
+  border-left-color: #548a71;
+}
+
+.timestamp-qa .panel li a {
+  background: var(--mint);
+  color: #174e3d;
+}
+
+.timestamp-qa .source-heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+body {
+  background: #171c1b;
+  color: #edf4ef;
+}
+
+.timestamp-app {
+  color-scheme: dark;
+  --surface: #202725;
+  --border: #3d4944;
+  --ink: #edf4ef;
+  --muted: #b7c6be;
+  --accent: #195c49;
+  --mint: #deeee5;
+}
+
+.timestamp-header {
+  background: var(--surface);
+  padding-inline: 16px;
+  border-radius: 12px 12px 0 0;
+}
+
+.timestamp-qa .panel form input {
+  background: #171c1b;
+  color: var(--ink);
+}
+
+.timestamp-qa .panel form input::placeholder {
+  color: var(--muted);
+}
+
+.timestamp-qa .panel li a {
+  background: var(--mint);
+  color: #174e3d;
+}
+
+.timestamp-app input[type="file"]::file-selector-button {
+  background: var(--mint);
+  color: #174e3d;
+}
+
+.timestamp-app .error {
+  color: #ffb4ab;
 }
