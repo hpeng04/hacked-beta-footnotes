@@ -18,7 +18,10 @@ from .conftest import BIO_SCRIPT, OS_CHUNKS, OS_SCRIPT, SPEECH, get, needs_ffmpe
 pytestmark = needs_ffmpeg
 
 
-def test_full_lecture_journey(client, stub_models, clip, fake_llm):
+def test_full_lecture_journey(client, stub_models, clip, fake_llm, monkeypatch):
+    # Exercise the legacy timeline fallback; shared section routing is covered separately.
+    from app.search import presentation
+    monkeypatch.setattr(presentation, "section_index", lambda lid: None)
     """Upload -> status -> transcript -> search -> ask -> timeline -> video, as the frontend does it."""
     stub_models.whisper.scripts.append(OS_SCRIPT)
 
@@ -97,7 +100,10 @@ def test_unknown_lecture_is_404_everywhere(client, stub_models):
     assert get(client, "/transcript", "nope").json() == []
 
 
-def test_preprocessed_demo_lecture_is_served_by_the_api(client, stub_models, clip, fake_llm, uploads):
+def test_preprocessed_demo_lecture_is_served_by_the_api(client, stub_models, clip, fake_llm, uploads, monkeypatch):
+    # Exercise the legacy timeline fallback; shared section routing is covered separately.
+    from app.search import presentation
+    monkeypatch.setattr(presentation, "section_index", lambda lid: None)
     """The demo workflow: scripts.preprocess, then scripts.build_timelines, then the app."""
     stub_models.whisper.scripts.append(OS_SCRIPT)
     assert preprocess.main([str(clip.path), "os-lecture", "--model", "small"]) == 0
@@ -141,7 +147,10 @@ def test_reprocessing_a_lecture_replaces_it(client, stub_models, clip):
     assert len(get(client, "/search", "lec", q="deadlock light").json()) == 1  # old rows are gone
 
 
-def test_reprocessing_a_lecture_rebuilds_its_timeline(client, stub_models, clip, fake_llm):
+def test_reprocessing_a_lecture_rebuilds_its_timeline(client, stub_models, clip, fake_llm, monkeypatch):
+    # Exercise the legacy timeline fallback; shared section routing is covered separately.
+    from app.search import presentation
+    monkeypatch.setattr(presentation, "section_index", lambda lid: None)
     stub_models.whisper.scripts += [OS_SCRIPT, BIO_SCRIPT]
     preprocess.main([str(clip.path), "lec"])
     queue_os_timeline(fake_llm, "lec")

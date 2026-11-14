@@ -2,7 +2,19 @@ import { useState } from "react";
 import { ask } from "../api.js";
 import { fmt } from "./TimelineBar.jsx";
 
-function AnswerText({ answer, sources, sentences, onSeek }) {
+function AnswerText({ answer, sources, sentences, citations, onSeek }) {
+  if (citations != null) {
+    return <>
+      {sentences?.length ? sentences.map(s => s.text).join(" ") : answer}
+      {citations.map(citation => <span key={citation.section_id}>
+        {" "}<button type="button" className="timestamp-chip answer-timestamp"
+          aria-label={`Replay ${citation.title} at ${fmt(citation.start)}`}
+          onClick={() => onSeek(citation.start)}>
+          {citation.title} [{fmt(citation.start)}]
+        </button>
+      </span>)}
+    </>;
+  }
   if (sentences?.length) {
     return sentences.map((sentence, index) => (
       <span key={index}>
@@ -76,7 +88,7 @@ export default function SearchPanel({ lectureId, onSeek }) {
         {result && (
           <div className="answer-note">
             <p className="answer-question">{askedQuestion}</p>
-            <p><AnswerText answer={result.answer} sources={result.sources} sentences={result.sentences} onSeek={onSeek} /></p>
+            <p><AnswerText answer={result.answer} sources={result.sources} sentences={result.sentences} citations={result.citations} onSeek={onSeek} /></p>
           </div>
         )}
         {loading && (

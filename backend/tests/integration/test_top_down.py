@@ -194,7 +194,10 @@ class TestLevel4Store:
         assert body["sources"][0]["start"] == 31.0
         assert "A deadlock happens when two threads" in fake_llm.calls[0]["json"]["messages"][0]["content"]
 
-    def test_timeline_is_built_from_the_stored_chunks(self, client, fake_llm):
+    def test_timeline_is_built_from_the_stored_chunks(self, client, fake_llm, monkeypatch):
+        # Exercise the legacy timeline fallback; shared section routing is covered separately.
+        from app.search import presentation
+        monkeypatch.setattr(presentation, "section_index", lambda lid: None)
         lecture_id = post_video(client)
         queue_os_timeline(fake_llm, lecture_id)
         assert get(client, "/timeline", lecture_id).json() == [

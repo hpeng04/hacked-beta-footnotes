@@ -24,10 +24,18 @@ class AnswerSentence(BaseModel):
     sources: list[Chunk]
 
 
+class ReplayCitation(BaseModel):
+    section_id: str
+    title: str
+    start: float
+    end: float
+
+
 class AskResponse(BaseModel):
     answer: str
     sources: list[Chunk]
     sentences: list[AnswerSentence] = Field(default_factory=list)
+    citations: list[ReplayCitation] | None = None
 
 
 class Section(BaseModel):

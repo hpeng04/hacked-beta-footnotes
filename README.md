@@ -119,7 +119,9 @@ The LLM receives bounded context around candidates and can retain, move to a nea
 
 Missing or invalid refinement results retain the semantic boundaries and neutral `Part N` titles. That fallback is cached to avoid repeatedly spending model calls; use `--force` to retry refinement. Embedding failures raise an error and preserve the previous cache. Cache fingerprints include the detector settings, embedding model/revision, and configured LLM providers/models; concurrent requests for the same lecture share one generation. Use `segmentation.build(lecture_id, options=Options(...))` from Python to configure context size, prompt budget, or an updated embedding revision.
 
-This stage generates and caches topic memberships. Q&A citation grouping and the timeline UI will consume those memberships in the next stage; existing timeline caches remain separate.
+Q&A and the timeline now share this section index. The answer model still receives sentence evidence and returns validated sentence IDs. The API preserves all supporting excerpts in `sources` and `sentences`, while `citations` contains one display link per cited section across the whole answer. Each link includes `section_id`, `title`, `start`, and `end`; its replay target is the earliest cited supporting sentence within the section, not necessarily the section start. Distinct sections retain separate links even when they are close together. If membership is unavailable or mismatches the evidence snapshot, proximity grouping supplies display links while preserving the evidence.
+
+The frontend renders the answer text and titled links without transcript blocks. The timeline uses the same section titles and starts, extending each displayed band through the silence before the following section. Existing timeline generation is retained as a fallback when the section index is unavailable.
 
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 
@@ -177,7 +179,7 @@ API:
 
 `POST /upload` returns at once and transcribes in the background. Poll `GET /status` until it says `ready` before loading the transcript, timeline or search; on `failed`, show `error`.
 
-`answer` remains a readable string with timestamp labels. `sentences` is an additive field: clients should render each sentence's citation buttons from its own sources, seeking to `source.start` without rounding. The top-level `sources` contains only cited excerpts, not every retrieval candidate.
+`answer` remains a readable string with timestamp labels. `citations` supplies deduplicated, titled replay links; clients should render those links and seek to each citation's `start` without rounding. `sentences` retains the original evidence associations. The top-level `sources` contains only cited excerpts, not every retrieval candidate.
 
 Person 1 hands over one hand-made transcript JSON right away, so Persons 2 and 3 can build against mock data.
 

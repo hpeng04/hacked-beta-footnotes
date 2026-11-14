@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from ..config import is_valid_lecture_id
 from ..schemas import AskRequest, AskResponse, Chunk, Section
 from . import llm, retrieval, timeline as timeline_mod
+from . import presentation
 
 router = APIRouter()
 
@@ -33,12 +34,16 @@ def ask(req: AskRequest):
     _require_lecture(req.lecture_id)
     sources = retrieval.search(req.lecture_id, question)
     sources = retrieval.answer_sources(req.lecture_id, sources)
-    return llm.answer_result(question, sources)
+    result = llm.answer_result(question, sources, preserve_evidence=True)
+    return presentation.with_citations(req.lecture_id, result)
 
 
 @router.get("/timeline", response_model=list[Section])
 def timeline(lecture_id: str):
-    sections = timeline_mod.build(lecture_id)  # served from cache even without a transcript
+    index = presentation.section_index(lecture_id)
+    sections = ([Section(title=s.title, start=s.start, end=(index.sections[i + 1].start
+                 if i + 1 < len(index.sections) else s.end)) for i, s in enumerate(index.sections)]
+                if index is not None else timeline_mod.build(lecture_id))
     if not sections:
         raise HTTPException(404, f"Unknown lecture: {lecture_id}")
     return sections
