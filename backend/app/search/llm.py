@@ -164,8 +164,37 @@ def _parse_answer(reply, by_id: dict[str, Chunk]) -> AskResponse:
             raise ValueError("empty answer text")
         cited.update(selected)
         sentences.append(AnswerSentence(text=text.strip(), sources=list(selected.values())))
+    sentences, sources = _group_citations(sentences, list(cited.values()))
     rendered = " ".join(
         f"{s.text} " + " ".join(f"[{fmt_time(c.start)}]" for c in s.sources)
         for s in sentences
     )
-    return AskResponse(answer=rendered, sources=sorted(cited.values(), key=lambda c: c.start), sentences=sentences)
+    return AskResponse(answer=rendered, sources=sources, sentences=sentences)
+
+
+def _group_citations(sentences: list[AnswerSentence], sources: list[Chunk]):
+    """One replay point for a nearby passage, bounded to avoid chaining chapters."""
+    groups: list[list[Chunk]] = []
+    for source in sorted(sources, key=lambda c: c.start):
+        if (groups and source.start - groups[-1][0].start <= 10
+                and source.start <= max(c.end for c in groups[-1]) + 2):
+            groups[-1].append(source)
+        else:
+            groups.append([source])
+    mapped = {}
+    passages = []
+    for group in groups:
+        passage = Chunk(lecture_id=group[0].lecture_id, start=group[0].start,
+                        end=max(c.end for c in group), text=" ".join(c.text for c in group))
+        passages.append(passage)
+        for source in group:
+            mapped[source_id(source)] = passage
+    result: list[AnswerSentence] = []
+    for sentence in sentences:
+        selected = {source_id(mapped[source_id(c)]): mapped[source_id(c)] for c in sentence.sources}
+        resolved = list(selected.values())
+        if result and result[-1].sources == resolved:
+            result[-1].text += " " + sentence.text
+        else:
+            result.append(AnswerSentence(text=sentence.text, sources=resolved))
+    return result, passages

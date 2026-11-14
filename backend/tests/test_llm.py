@@ -154,7 +154,7 @@ def test_invalid_answers_never_invent_or_relocate_citations(fake_llm, bad):
     assert result.sources == result.sentences == []
 
 
-def test_same_display_second_retains_independent_seek_targets(fake_llm):
+def test_nearby_sentences_share_one_precise_replay_target(fake_llm):
     a = Chunk(lecture_id="lec", start=111.1, end=111.4, text="Yes.")
     b = Chunk(lecture_id="lec", start=111.5, end=111.9, text="No.")
     fake_llm.reply("groq", json.dumps({"sentences": [
@@ -162,8 +162,29 @@ def test_same_display_second_retains_independent_seek_targets(fake_llm):
         {"text": "Second answer.", "source_ids": [source_id(b)]},
     ]}))
     result = llm.answer_result("q", [b, a])
-    assert result.answer.count("[1:51]") == 2
-    assert [s.sources[0].start for s in result.sentences] == [111.1, 111.5]
+    assert result.answer.count("[1:51]") == 1
+    assert result.sentences[0].text == "First answer. Second answer."
+    assert result.sources[0].start == 111.1 and result.sources[0].end == 111.9
+
+
+def test_memory_passage_has_one_citation_but_later_allocation_stays_separate(fake_llm):
+    sources = [Chunk(lecture_id="lec", start=s, end=s + 3, text=f"Memory at {s}.")
+               for s in (51.56, 54.46, 57.48, 111.3)]
+    fake_llm.reply_answer("groq", ("Variables receive memory.", sources[:1]),
+                          ("Pointers and free manage it.", sources[1:3]),
+                          ("Later comes allocation.", sources[3:]))
+    result = llm.answer_result("q", sources)
+    assert [c.start for c in result.sources] == [51.56, 111.3]
+    assert result.answer.count("[0:51]") == 1
+    assert "[0:54]" not in result.answer and "[0:57]" not in result.answer
+    assert "[1:51]" in result.answer
+
+
+def test_nearby_starts_with_a_silence_are_not_grouped(fake_llm):
+    sources = [Chunk(lecture_id="lec", start=51, end=52, text="First."),
+               Chunk(lecture_id="lec", start=59, end=60, text="Second.")]
+    fake_llm.reply_answer("groq", ("Two passages.", sources))
+    assert len(llm.answer_result("q", sources).sources) == 2
 
 
 def test_multiple_supporting_excerpts_are_preserved_without_word_overlap_rewrite(fake_llm):
