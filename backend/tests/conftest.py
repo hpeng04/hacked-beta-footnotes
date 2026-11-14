@@ -36,6 +36,7 @@ class FakeLLM:
 @pytest.fixture(autouse=True)
 def fake_llm(request, monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")  # never touch the real cache
+    monkeypatch.setattr(config, "CHROMA_DIR", tmp_path / "chroma")  # nor the real vector DB
     if request.node.get_closest_marker("live") or request.node.get_closest_marker("ollama"):
         return None  # live tests use the real network and the settings from backend/.env
     fake = FakeLLM()

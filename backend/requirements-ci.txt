@@ -1,8 +1,10 @@
-# Light deps for CI: no Whisper, torch or Chroma. Tests fake the LLM and use mock data.
+# Light deps for CI: no Whisper or torch. Tests fake the LLM and both models; the vector DB is real.
 fastapi
 uvicorn[standard]
 python-multipart
 python-dotenv
 httpx
+chromadb
+numpy
 pytest
 ruff
