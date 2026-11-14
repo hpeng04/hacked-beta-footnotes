@@ -22,6 +22,7 @@ class AskRequest(BaseModel):
 class AnswerSentence(BaseModel):
     text: str
     sources: list[Chunk]
+    section_ids: list[str] = Field(default_factory=list)  # citations (by section_id) backing this sentence
 
 
 class ReplayCitation(BaseModel):

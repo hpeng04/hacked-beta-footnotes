@@ -23,7 +23,10 @@ def test_nonconsecutive_references_deduplicate_globally_without_losing_evidence(
     before = answer.model_dump()
     result = presentation.with_citations('lec',answer)
     assert [c.start for c in result.citations] == [51.56,111.3]
-    assert result.model_dump()['sentences'] == before['sentences']
+    kept = lambda dumped: [{k: s[k] for k in ('text', 'sources')} for s in dumped['sentences']]
+    assert kept(result.model_dump()) == kept(before)
+    first, second = (s.id for s in example[1].sections)
+    assert [s.section_ids for s in result.sentences] == [[first], [second], [first]]
     assert result.model_dump()['sources'] == before['sources']
     assert result.answer.count('[0:51]') == 1
     assert '[0:54]' not in result.answer
@@ -47,7 +50,9 @@ def test_fallback_preserves_sentence_evidence(example, monkeypatch):
     sources,_=example
     monkeypatch.setattr(presentation,'section_index',lambda *a:None)
     answer=AskResponse(answer='Claim',sources=sources,sentences=[AnswerSentence(text='Claim.',sources=sources)])
-    assert len(presentation.with_citations('lec',answer).citations)==2
+    citations=presentation.with_citations('lec',answer).citations
+    assert len(citations)==2
+    assert answer.sentences[0].section_ids==[c.section_id for c in citations]
     assert answer.sources==sources
 
 
