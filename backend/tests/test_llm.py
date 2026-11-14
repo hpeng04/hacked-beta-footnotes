@@ -1,7 +1,10 @@
+import json
+
 import httpx
 import pytest
 
 from app import config
+from app.ingestion.timing import source_id
 from app.schemas import Chunk
 from app.search import llm
 
@@ -99,42 +102,111 @@ def test_answer_without_sources_skips_llm(fake_llm):
     assert fake_llm.calls == []
 
 
-def test_answer_returns_llm_text(fake_llm):
-    fake_llm.reply("groq", "  Deadlock is when threads wait forever [1:35].\n")
-    assert llm.answer("what is deadlock", SOURCES) == "Deadlock is when threads wait forever [1:35]."
+def reply_sentence(text, *sources):
+    return json.dumps({"sentences": [{"text": text, "source_ids": [source_id(c) for c in sources]}]})
 
 
-def test_answer_prompt_has_question_and_timestamped_sources_in_order(fake_llm):
-    fake_llm.reply("groq", "x")
+def test_answer_resolves_ids_to_stored_timestamps(fake_llm):
+    fake_llm.reply("groq", reply_sentence("Threads wait forever.", SOURCES[1]))
+    result = llm.answer_result("what is deadlock", SOURCES)
+    assert result.answer == "Threads wait forever. [1:35]"
+    assert result.sources == [SOURCES[1]]
+    assert result.sentences[0].sources == [SOURCES[1]]
+
+
+def test_answer_prompt_uses_stable_ids_without_generated_times(fake_llm):
+    fake_llm.reply("groq", '{"sentences": []}')
     llm.answer("what is deadlock", SOURCES)
-    prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
+    call = fake_llm.calls[0]["json"]
+    prompt = call["messages"][0]["content"]
     assert "Question: what is deadlock" in prompt
-    assert prompt.index("(Excerpt at [1:35])\nLocks create deadlock.") < prompt.index("(Excerpt at [2:10])\nDeadlock needs four conditions.")
+    assert prompt.index(source_id(SOURCES[1])) < prompt.index(source_id(SOURCES[0]))
+    assert "[1:35]" not in prompt
+    assert call["response_format"] == {"type": "json_object"}
 
 
-def test_answer_falls_back_to_top_source_when_llm_down(fake_llm):
+def test_answer_failure_does_not_dump_transcript(fake_llm):
     fake_llm.reply("groq", httpx.ConnectError("down"))
     fake_llm.reply("generativelanguage", httpx.ConnectError("down"))
-    assert llm.answer("q", SOURCES) == "[2:10] Deadlock needs four conditions."
+    result = llm.answer_result("q", SOURCES)
+    assert result.answer == llm.UNAVAILABLE
+    assert result.sources == result.sentences == []
 
 
-# --- live-run findings: citation format, retries ---
+def test_unanswerable_cites_nothing(fake_llm):
+    fake_llm.reply("groq", '{"sentences": []}')
+    result = llm.answer_result("q", SOURCES)
+    assert result.answer == llm.NOT_COVERED and not result.sources
 
-@pytest.mark.parametrize("raw,clean", [
-    ("Water is split 【1:33】.", "Water is split [1:33]."),
-    ("See (4:03) and （1:02:05）.", "See [4:03] and [1:02:05]."),
-    ("Already fine [1:33].", "Already fine [1:33]."),
-    ("Not a time (see above).", "Not a time (see above)."),
+
+@pytest.mark.parametrize("bad", [
+    {"sentences": [{"text": "Claim.", "source_ids": ["made-up"]}]},
+    {"sentences": [{"text": "Claim.", "source_ids": []}]},
+    {"sentences": [{"text": "Claim.", "source_ids": "s_123"}]},
+    {"sentences": [{"text": "Claim.", "source_ids": [{}]}]},
+    {"sentences": [{"text": "Claim [1:35].", "source_ids": []}]},
+    {"sentences": [None]}, {"sentences": "wrong"}, [], {},
 ])
-def test_answer_normalizes_citations(fake_llm, raw, clean):
-    fake_llm.reply("groq", raw)
-    assert llm.answer("q", SOURCES) == clean
+def test_invalid_answers_never_invent_or_relocate_citations(fake_llm, bad):
+    fake_llm.reply("groq", json.dumps(bad))
+    result = llm.answer_result("q", SOURCES)
+    assert result.answer == llm.UNAVAILABLE
+    assert result.sources == result.sentences == []
 
 
-def test_answer_prompt_says_cite_nothing_when_unanswerable(fake_llm):
-    fake_llm.reply("groq", "x")
-    llm.answer("q", SOURCES)
-    assert f"reply exactly: {llm.NOT_COVERED}" in fake_llm.calls[0]["json"]["messages"][0]["content"]
+def test_nearby_sentences_share_one_precise_replay_target(fake_llm):
+    a = Chunk(lecture_id="lec", start=111.1, end=111.4, text="Yes.")
+    b = Chunk(lecture_id="lec", start=111.5, end=111.9, text="No.")
+    fake_llm.reply("groq", json.dumps({"sentences": [
+        {"text": "First answer.", "source_ids": [source_id(a)]},
+        {"text": "Second answer.", "source_ids": [source_id(b)]},
+    ]}))
+    result = llm.answer_result("q", [b, a])
+    assert result.answer.count("[1:51]") == 1
+    assert result.sentences[0].text == "First answer. Second answer."
+    assert result.sources[0].start == 111.1 and result.sources[0].end == 111.9
+
+
+def test_memory_passage_has_one_citation_but_later_allocation_stays_separate(fake_llm):
+    sources = [Chunk(lecture_id="lec", start=s, end=s + 3, text=f"Memory at {s}.")
+               for s in (51.56, 54.46, 57.48, 111.3)]
+    fake_llm.reply_answer("groq", ("Variables receive memory.", sources[:1]),
+                          ("Pointers and free manage it.", sources[1:3]),
+                          ("Later comes allocation.", sources[3:]))
+    result = llm.answer_result("q", sources)
+    assert [c.start for c in result.sources] == [51.56, 111.3]
+    assert result.answer.count("[0:51]") == 1
+    assert "[0:54]" not in result.answer and "[0:57]" not in result.answer
+    assert "[1:51]" in result.answer
+
+
+def test_nearby_starts_with_a_silence_are_not_grouped(fake_llm):
+    sources = [Chunk(lecture_id="lec", start=51, end=52, text="First."),
+               Chunk(lecture_id="lec", start=59, end=60, text="Second.")]
+    fake_llm.reply_answer("groq", ("Two passages.", sources))
+    assert len(llm.answer_result("q", sources).sources) == 2
+
+
+def test_multiple_supporting_excerpts_are_preserved_without_word_overlap_rewrite(fake_llm):
+    fake_llm.reply("groq", reply_sentence("Yes, both conditions apply.", *SOURCES))
+    result = llm.answer_result("q", SOURCES)
+    assert result.sentences[0].sources == SOURCES
+
+
+@pytest.mark.parametrize("wrapper", ["({id})", "[{id}]", "{id}", "（{id}）"])
+def test_internal_ids_are_removed_from_prose_without_changing_citation(fake_llm, wrapper):
+    source = SOURCES[1]
+    leaked = wrapper.format(id=source_id(source))
+    fake_llm.reply("groq", reply_sentence(f"Memory is assigned to variables {leaked}.", source))
+    result = llm.answer_result("where is memory mentioned?", SOURCES)
+    assert result.sentences[0].text == "Memory is assigned to variables."
+    assert result.sentences[0].sources == [source]
+    assert "s_" not in result.answer
+
+
+def test_unknown_id_in_prose_is_rejected_instead_of_guessed(fake_llm):
+    fake_llm.reply("groq", reply_sentence("Memory is assigned (s_madeup).", SOURCES[0]))
+    assert llm.answer_result("q", SOURCES).answer == llm.UNAVAILABLE
 
 
 def status_error(code, headers=None):
@@ -190,35 +262,3 @@ def test_ollama_gets_longer_timeout(fake_llm, monkeypatch):
     assert seen == [llm.TIMEOUTS["ollama"], llm.DEFAULT_TIMEOUT]
 
 
-# --- citation grounding (small models, e.g. gemma on Ollama) ---
-
-ROUND_ROBIN = [
-    Chunk(lecture_id="os", start=213.7, end=243.7, text="Okay, round robin. Each process gets a small time slice, called a quantum."),
-    Chunk(lecture_id="os", start=243.7, end=273.7, text="Choosing the quantum is the key design decision. Too large and round robin degenerates into FCFS."),
-    Chunk(lecture_id="os", start=367.8, end=397.8, text="Homework three: implement gradient descent from scratch. Due next Tuesday."),
-]
-
-
-@pytest.mark.parametrize("raw,grounded", [
-    # live failure 1: no citation at all -> best matching source added
-    ("Due next Tuesday.", "Due next Tuesday [6:07]."),
-    # live failure 2: copied excerpt-label style, cited the neighbouring chunk -> moved
-    ("[3:33] Choosing the quantum is the key design decision.", "[4:03] Choosing the quantum is the key design decision."),
-    # correct citations are left alone
-    ("Too large and it degenerates into FCFS [4:03].", "Too large and it degenerates into FCFS [4:03]."),
-    # a reasonable citation that is not the single best match is kept
-    ("Round robin gives each process a quantum [3:33].", "Round robin gives each process a quantum [3:33]."),
-    # live failure 3: refusal with a made-up citation -> citation removed
-    ("Nothing can be answered [6:07].", "Nothing can be answered."),
-    # terse real answer with no word overlap keeps its citation
-    ("Yes [4:03].", "Yes [4:03]."),
-    # canned refusal from the prompt -> returned clean, whatever the model appended
-    ("The lecture does not cover that [3:33].", "The lecture does not cover that."),
-    # off-topic refusal stays uncited
-    ("The excerpts do not cover virtual memory paging.", "The excerpts do not cover virtual memory paging."),
-    # once the reply cites something, uncited sentences are not given extra citations
-    ("Due next Tuesday [6:07]. Implement gradient descent from scratch.", "Due next Tuesday [6:07]. Implement gradient descent from scratch."),
-])
-def test_answer_grounds_citations(fake_llm, raw, grounded):
-    fake_llm.reply("groq", raw)
-    assert llm.answer("q", ROUND_ROBIN) == grounded

@@ -32,7 +32,8 @@ def ask(req: AskRequest):
     question = _require_text(req.question, "question")
     _require_lecture(req.lecture_id)
     sources = retrieval.search(req.lecture_id, question)
-    return AskResponse(answer=llm.answer(question, sources), sources=sources)
+    sources = retrieval.answer_sources(req.lecture_id, sources)
+    return llm.answer_result(question, sources)
 
 
 @router.get("/timeline", response_model=list[Section])

@@ -3,12 +3,13 @@ import json
 import httpx
 
 from app.ingestion import store
+from app.ingestion.timing import source_id
 from app.schemas import Chunk
 from app.search import timeline
 from scripts import build_timelines
 
 CHUNKS = [Chunk(lecture_id="lec", start=0, end=100, text="a"), Chunk(lecture_id="lec", start=100, end=200, text="b")]
-REPLY = json.dumps({"sections": [{"title": "A", "start": 0}, {"title": "B", "start": 100}]})
+REPLY = json.dumps({"sections": [{"title": t, "start_id": source_id(c)} for t, c in zip(["A", "B"], CHUNKS)]})
 
 
 def use_chunks(monkeypatch):

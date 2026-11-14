@@ -18,7 +18,7 @@ from app import config
 from app.ingestion import pipeline, store
 from app.schemas import Chunk
 
-from .conftest import BIO_SCRIPT, OS_CHUNKS, OS_SCRIPT, OS_TIMELINE_REPLY, get, needs_ffmpeg, post_video, segments
+from .conftest import BIO_SCRIPT, OS_CHUNKS, OS_SCRIPT, get, needs_ffmpeg, post_video, segments
 
 
 def as_json(lecture_id, chunks):
@@ -187,7 +187,8 @@ class TestLevel4Store:
 
     def test_ask_cites_chunks_from_the_vector_db(self, client, fake_llm):
         lecture_id = post_video(client)
-        fake_llm.reply("groq", "It needs circular wait [0:31].")
+        fake_llm.reply_answer("groq", ("Threads wait for each other.",
+                                       [next(c for c in pipeline.load_segments(lecture_id) if c.start == 31)]))
         body = client.post("/ask", json={"lecture_id": lecture_id, "question": "what is a deadlock?"}).json()
         assert body["answer"]
         assert body["sources"][0]["start"] == 31.0
@@ -195,7 +196,7 @@ class TestLevel4Store:
 
     def test_timeline_is_built_from_the_stored_chunks(self, client, fake_llm):
         lecture_id = post_video(client)
-        fake_llm.reply("groq", OS_TIMELINE_REPLY)
+        queue_os_timeline(fake_llm, lecture_id)
         assert get(client, "/timeline", lecture_id).json() == [
             {"title": "Intro", "start": 0.0, "end": 31.0},
             {"title": "Deadlock", "start": 31.0, "end": 64.0},
@@ -246,3 +247,8 @@ class TestLevel5Transcribe:
         status = get(client, "/status", lecture_id).json()
         assert status["status"] == "failed" and "could not extract audio" in status["error"]
         assert stub_models.whisper.heard == [] and stub_models.whisper.loaded == []
+
+
+def queue_os_timeline(fake_llm, lecture_id):
+    sources = {c.start: c for c in pipeline.load_segments(lecture_id)}
+    fake_llm.reply_timeline("groq", *((title, sources[start]) for title, start in [("Intro", 0), ("Deadlock", 31), ("Semaphores", 64)]))

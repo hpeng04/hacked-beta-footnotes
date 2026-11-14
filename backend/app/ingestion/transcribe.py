@@ -26,17 +26,23 @@ def _whisper():
 
 
 def transcribe(video_path: Path) -> list[dict]:
-    """Return Whisper segments as [{"start": float, "end": float, "text": str}]."""
+    """Return segments and word alignment in the original audio's time coordinates."""
     video_path = Path(video_path)
     if not video_path.exists():
         raise FileNotFoundError(video_path)
     with tempfile.TemporaryDirectory() as tmp:  # the wav is removed even if Whisper fails
         wav_path = Path(tmp) / "audio.wav"
         _extract_audio(video_path, wav_path)
-        segments, _info = _whisper().transcribe(str(wav_path), vad_filter=True)
+        segments, _info = _whisper().transcribe(str(wav_path), vad_filter=True, word_timestamps=True)
         # segments is a generator: transcription happens here, while the wav still exists
         return [
-            {"start": float(s.start), "end": float(s.end), "text": s.text.strip()}
+            {
+                "start": float(s.start), "end": float(s.end), "text": s.text.strip(),
+                "words": [
+                    {"start": float(w.start), "end": float(w.end), "word": w.word}
+                    for w in (s.words or [])
+                ],
+            }
             for s in segments
             if s.text.strip()
         ]

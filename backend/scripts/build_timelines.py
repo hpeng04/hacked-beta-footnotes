@@ -19,10 +19,10 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = []
     for lecture_id in args.lecture_ids:
-        if not args.force and timeline.cache_path(lecture_id).exists():
-            print(f"{lecture_id}: cached, skipped (use --force to rebuild)")
-            continue
         try:
+            if not args.force and timeline.cached(lecture_id) is not None:
+                print(f"{lecture_id}: cached, skipped (use --force to rebuild)")
+                continue
             sections = timeline.rebuild(lecture_id)  # keeps the old cache if this fails
         except LookupError:
             print(f"{lecture_id}: FAILED (no transcript)")

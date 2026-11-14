@@ -1,7 +1,31 @@
-[
-  {"title": "Race conditions", "start": 0, "end": 61},
-  {"title": "Locks", "start": 61, "end": 95},
-  {"title": "Deadlock", "start": 95, "end": 204},
-  {"title": "Semaphores", "start": 204, "end": 240},
-  {"title": "Wrap-up", "start": 240, "end": 270}
-]
+{
+  "version": 2,
+  "fingerprint": "e38e7c81946e76a89dd305d751d811554500f42fb7cf4d6631195b0385459e9b",
+  "sections": [
+    {
+      "title": "Race conditions",
+      "start": 0,
+      "end": 61
+    },
+    {
+      "title": "Locks",
+      "start": 61,
+      "end": 95
+    },
+    {
+      "title": "Deadlock",
+      "start": 95,
+      "end": 204
+    },
+    {
+      "title": "Semaphores",
+      "start": 204,
+      "end": 240
+    },
+    {
+      "title": "Wrap-up",
+      "start": 240,
+      "end": 270
+    }
+  ]
+}

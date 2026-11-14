@@ -336,6 +336,16 @@ p {
   background: var(--accent-soft-hover);
 }
 
+.answer-timestamp {
+  padding: 0 4px;
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  vertical-align: baseline;
+}
+
 .ask-form {
   display: flex;
   gap: 8px;

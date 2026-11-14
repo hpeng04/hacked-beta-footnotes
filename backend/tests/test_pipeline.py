@@ -115,7 +115,7 @@ def test_bad_lecture_ids_never_touch_disk(fakes, bad):
 
 def test_no_temp_files_left_behind(fakes):
     pipeline.ingest(Path("video.mp4"), "lec")
-    assert sorted(p.name for p in config.CACHE_DIR.iterdir()) == ["lec.status.json", "lec.transcript.json"]
+    assert sorted(p.name for p in config.CACHE_DIR.iterdir()) == ["lec.segments.json", "lec.status.json", "lec.transcript.json"]
 
 
 def test_failed_write_keeps_the_old_file_and_leaves_no_temp_file():
@@ -214,3 +214,92 @@ def test_forced_run_indexes_before_it_replaces_the_cache(fakes, monkeypatch):
     pipeline.ingest(Path("video.mp4"), "lec", force=True)
     assert seen == [CHUNKS]  # the old transcript was still cached while indexing ran
     assert len(pipeline.load_transcript("lec")) == 1
+
+
+def test_ingest_preserves_original_segments_alongside_merged_chunks(fakes):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    assert pipeline.load_segments("lec") == [Chunk(lecture_id="lec", **s) for s in SEGMENTS]
+    assert len(pipeline.load_segments("lec")) == 3
+    assert len(pipeline.load_transcript("lec")) == 2
+
+
+def test_successful_force_updates_segment_timing(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    changed = [{"start": 110.4, "end": 117.0, "text": "Allocate memory here."}]
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: changed)
+    pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert pipeline.load_segments("lec") == [Chunk(lecture_id="lec", **changed[0])]
+
+
+def test_failed_forced_index_preserves_original_segment_timing(fakes, monkeypatch):
+    pipeline.ingest(Path("video.mp4"), "lec")
+    previous = pipeline.load_segments("lec")
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: SEGMENTS[:1])
+    monkeypatch.setattr(pipeline.store, "add_chunks", lambda chunks: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        pipeline.ingest(Path("video.mp4"), "lec", force=True)
+    assert pipeline.load_segments("lec") == previous
+
+
+def test_old_recording_recovers_segment_timing_only_once(fakes, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "uploads")
+    config.UPLOAD_DIR.mkdir()
+    video = config.UPLOAD_DIR / "lec.mp4"
+    video.write_bytes(b"saved video")
+    pipeline._write_json(pipeline.transcript_path("lec"), [c.model_dump() for c in CHUNKS])
+    pipeline.set_status("lec", pipeline.READY)
+    assert pipeline.load_segments("lec") is None
+    segments = pipeline.citation_segments("lec")
+    assert segments == [Chunk(lecture_id="lec", **s) for s in SEGMENTS]
+    assert pipeline.citation_segments("lec") == segments
+    assert fakes["transcribe"] == [video]
+    assert fakes["add_chunks"] == []
+    assert pipeline.load_transcript("lec") == CHUNKS
+    assert pipeline.get_status("lec") == {"status": "ready"}
+
+
+def test_portable_transcript_without_video_does_not_guess_segment_timing(fakes, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "absent")
+    pipeline._write_json(pipeline.transcript_path("lec"), [c.model_dump() for c in CHUNKS])
+    assert pipeline.citation_segments("lec") is None
+    assert fakes["transcribe"] == []
+
+
+def test_failed_timing_recovery_keeps_original_recording_cache(fakes, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "uploads")
+    config.UPLOAD_DIR.mkdir()
+    (config.UPLOAD_DIR / "lec.mp4").write_bytes(b"saved video")
+    pipeline._write_json(pipeline.transcript_path("lec"), [c.model_dump() for c in CHUNKS])
+    pipeline.set_status("lec", pipeline.READY)
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        pipeline.citation_segments("lec")
+    assert pipeline.load_segments("lec") is None
+    assert pipeline.load_transcript("lec") == CHUNKS
+    assert pipeline.get_status("lec") == {"status": "ready"}
+
+
+def test_word_timing_is_cached_and_survives_reindex(fakes, monkeypatch):
+    words = [{"start": 111.3, "end": 111.96, "word": " Allocate."}]
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: [
+        {"start": 110.66, "end": 115.26, "text": "Allocate.", "words": words},
+    ])
+    pipeline.ingest(Path("video.mp4"), "lec")
+    pipeline.ingest(Path("video.mp4"), "lec")
+    saved = json.loads(pipeline.segments_path("lec").read_text())
+    assert saved["version"] == 2
+    assert saved["segments"][0]["words"] == words
+    assert pipeline.load_timing("lec")[0].words[0].start == 111.3
+
+
+def test_legacy_segment_cache_gets_word_timing_once(fakes, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "uploads")
+    config.UPLOAD_DIR.mkdir()
+    video = config.UPLOAD_DIR / "lec.mp4"
+    video.write_bytes(b"saved video")
+    pipeline._write_json(pipeline.transcript_path("lec"), [c.model_dump() for c in CHUNKS])
+    pipeline._write_json(pipeline.segments_path("lec"), [Chunk(lecture_id="lec", **s).model_dump() for s in SEGMENTS])
+    pipeline.citation_timing("lec")
+    pipeline.citation_timing("lec")
+    assert fakes["transcribe"] == [video]
+    assert pipeline.load_transcript("lec") == CHUNKS
