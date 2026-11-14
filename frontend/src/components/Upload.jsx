@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { status as fetchStatus, upload } from "../api.js";
+import { upload } from "../api.js";
 
-const POLL_MS = 2000;
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export default function Upload({ onUploaded }) {
+export default function Upload({ onUploaded, buttonLabel }) {
+  const fileInputRef = useRef(null);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
-  const run = useRef(0); // bumped by every new upload and on unmount, so stale polls stop
+  const run = useRef(0); // bumped by every new upload and on unmount, so stale uploads are ignored
 
   useEffect(() => () => { run.current += 1; }, []);
 
@@ -21,19 +19,10 @@ export default function Upload({ onUploaded }) {
     try {
       const lecture = await upload(file);
       if (!current()) return;
-      onUploaded({ ...lecture, ready: false }); // the video can play while it is transcribed
-      setMessage("Transcribing… this can take a few minutes");
-      // The backend transcribes in the background: poll until it is done.
-      for (;;) {
-        const { status, error } = await fetchStatus(lecture.lecture_id);
-        if (!current()) return;
-        if (status === "ready") break;
-        if (status === "failed") throw new Error(`Transcription failed: ${error || "unknown error"}`);
-        await sleep(POLL_MS);
-        if (!current()) return;
-      }
-      onUploaded({ ...lecture, ready: true });
-      setMessage("Ready");
+      // The backend transcribes in the background; App polls until it is ready.
+      // ready: false lets the video play while it is transcribed.
+      onUploaded({ ...lecture, filename: file.name, ready: false });
+      setMessage("Uploaded");
     } catch (err) {
       if (!current()) return;
       setFailed(true);
@@ -43,8 +32,19 @@ export default function Upload({ onUploaded }) {
 
   return (
     <p>
-      <input type="file" accept="video/*,audio/*" onChange={onChange} />{" "}
-      <span className={failed ? "error" : undefined} role="status">{message}</span>
+      {buttonLabel && (
+        <button type="button" onClick={() => fileInputRef.current?.click()}>
+          {buttonLabel}
+        </button>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*,audio/*"
+        onChange={onChange}
+        hidden={Boolean(buttonLabel)}
+      />
+      {message && <span className={failed ? "error" : undefined} role="status"> {message}</span>}
     </p>
   );
 }
