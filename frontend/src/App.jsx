@@ -71,6 +71,8 @@ export default function App() {
               <VideoPlayer
                 ref={videoRef}
                 src={API_URL + lecture.video_url}
+                lectureId={lecture.lecture_id}
+                ready={lecture.ready}
               />
             ) : (
               <div className="timestamp-upload">

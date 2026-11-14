@@ -504,3 +504,160 @@ body {
 .timestamp-app .error {
   color: #ffb4ab;
 }
+/* Custom video player with the topic timeline as its seek bar */
+.player {
+  display: flex;
+  flex-direction: column;
+  background: #111b1c;
+  color: #edf4ef;
+}
+
+.player video {
+  cursor: pointer;
+  outline: none;
+}
+
+.player:fullscreen video {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+.player-controls {
+  padding: 6px 12px 8px;
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.player-row button {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.player-row button:hover {
+  background: #26393a;
+}
+
+.player-time {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.player-section {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #26393a;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.player-spacer {
+  flex: 1;
+}
+
+.player-volume {
+  width: 72px;
+  accent-color: #deeee5;
+}
+
+.player-row select {
+  padding: 4px;
+  border: 1px solid #3d4944;
+  border-radius: 6px;
+  background: #111b1c;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.timeline {
+  position: relative;
+  display: block;
+  margin: 0;
+  padding: 8px 0;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.timeline-track {
+  position: relative;
+  height: 8px;
+  transition: height 0.1s;
+}
+
+.timeline:hover .timeline-track,
+.timeline:focus-visible .timeline-track {
+  height: 12px;
+}
+
+.timeline-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 3px;
+  border-inline: 1px solid #111b1c;
+  background: color-mix(in srgb, var(--color) 40%, #111b1c);
+}
+
+.timeline-segment > span {
+  display: block;
+  height: 100%;
+  background: var(--color);
+}
+
+.timeline-thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 2px #111b1c;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.timeline:focus-visible .timeline-thumb {
+  box-shadow: 0 0 0 3px #7fc4a4;
+}
+
+.timeline-tip {
+  position: absolute;
+  bottom: 100%;
+  display: grid;
+  justify-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #000c;
+  color: #fff;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .player-volume,
+  .player-section {
+    display: none;
+  }
+}
