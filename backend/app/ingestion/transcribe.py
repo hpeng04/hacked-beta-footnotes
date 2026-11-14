@@ -20,9 +20,10 @@ def _extract_audio(video_path: Path, wav_path: Path) -> None:
 
 @lru_cache(maxsize=1)
 def _whisper():
-    from faster_whisper import WhisperModel  # slow import, only when first needed
+    from faster_whisper import BatchedInferencePipeline, WhisperModel  # slow import, only when first needed
 
-    return WhisperModel(config.WHISPER_MODEL, device="cpu", compute_type="int8")
+    model = WhisperModel(config.WHISPER_MODEL, device="cpu", compute_type="int8")
+    return BatchedInferencePipeline(model=model)
 
 
 def transcribe(video_path: Path) -> list[dict]:
@@ -33,7 +34,12 @@ def transcribe(video_path: Path) -> list[dict]:
     with tempfile.TemporaryDirectory() as tmp:  # the wav is removed even if Whisper fails
         wav_path = Path(tmp) / "audio.wav"
         _extract_audio(video_path, wav_path)
-        segments, _info = _whisper().transcribe(str(wav_path), vad_filter=True)
+        segments, _info = _whisper().transcribe(
+            str(wav_path),
+            vad_filter=True,
+            batch_size=config.WHISPER_BATCH_SIZE,
+            beam_size=config.WHISPER_BEAM_SIZE,
+        )
         # segments is a generator: transcription happens here, while the wav still exists
         return [
             {"start": float(s.start), "end": float(s.end), "text": s.text.strip()}

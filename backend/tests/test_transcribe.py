@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app import config
 from app.ingestion import transcribe as t
 
 needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
@@ -88,7 +89,7 @@ def test_transcribe_returns_clean_segments(whisper, video):
 def test_transcribe_cleans_up_the_wav(whisper, video):
     t.transcribe(video)
     (path, kwargs, existed), = whisper.calls
-    assert existed and kwargs == {"vad_filter": True}
+    assert existed and kwargs == {"vad_filter": True, "batch_size": config.WHISPER_BATCH_SIZE, "beam_size": config.WHISPER_BEAM_SIZE}
     assert not Path(path).exists()
 
 
@@ -114,11 +115,20 @@ def test_whisper_is_loaded_once_from_config(monkeypatch):
         def __init__(self, name, device, compute_type):
             made.append((name, device, compute_type))
 
-    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisperModel))
+    class FakePipeline:
+        def __init__(self, model):
+            self.model = model
+
+    monkeypatch.setitem(
+        sys.modules,
+        "faster_whisper",
+        types.SimpleNamespace(WhisperModel=FakeWhisperModel, BatchedInferencePipeline=FakePipeline),
+    )
     monkeypatch.setattr(config, "WHISPER_MODEL", "tiny")
     t._whisper.cache_clear()
     try:
         assert t._whisper() is t._whisper()
         assert made == [("tiny", "cpu", "int8")]
+        assert isinstance(t._whisper(), FakePipeline)
     finally:
         t._whisper.cache_clear()

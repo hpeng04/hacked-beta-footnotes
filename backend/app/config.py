@@ -14,7 +14,9 @@ CACHE_DIR = DATA_DIR / "cache"
 MOCK_DIR = DATA_DIR / "mock"
 CHROMA_DIR = DATA_DIR / "chroma"
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+WHISPER_BATCH_SIZE = int(os.getenv("WHISPER_BATCH_SIZE", "8"))  # higher = faster, more RAM
+WHISPER_BEAM_SIZE = int(os.getenv("WHISPER_BEAM_SIZE", "1"))  # 1 = greedy (fast); 5 = more accurate
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 LECTURE_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")  # also keeps ids safe to use in file names
 
