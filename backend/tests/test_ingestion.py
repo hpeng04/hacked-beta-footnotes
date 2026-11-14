@@ -1,9 +1,11 @@
 """Smoke tests for Person 1's ingestion endpoints."""
+from app import config
 from app.ingestion import router as ingestion_router
 
 
 def test_upload_saves_file(client, tmp_path, monkeypatch):
-    monkeypatch.setattr(ingestion_router, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(ingestion_router, "_ingest", lambda path, lecture_id: None)  # no transcription here
     r = client.post("/upload", files={"file": ("clip.mp4", b"fake video", "video/mp4")})
     assert r.status_code == 200
     body = r.json()

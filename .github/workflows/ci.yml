@@ -23,6 +23,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-ci.txt
       - run: pip install -r requirements-ci.txt
+      # The transcription and integration tests run real ffmpeg; without it they are skipped.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       # Errors only (syntax, undefined names, unused imports), not style.
       - run: ruff check --isolated --select E9,F .
       # Live LLM tests are skipped by pytest.ini.
