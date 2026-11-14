@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import threading
+import time
 from collections import defaultdict
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,10 +16,19 @@ from . import llm, retrieval, sections
 from .titles import descriptive_title
 
 log = logging.getLogger(__name__)
-REVISION = "2"
+ALGORITHM = "windowed-cosine-with-refinement"
+REVISION = "3"
 TEXT_LIMIT = 600
+RETRY_SECONDS = 60  # spacing between background attempts for one lecture
 _locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 _locks_guard = threading.Lock()
+_pending: set[str] = set()
+_retry_at: dict[str, float] = {}
+
+
+def _lock(lecture_id: str) -> threading.Lock:
+    with _locks_guard:
+        return _locks[lecture_id]
 
 
 class Options(BaseModel):
@@ -36,7 +46,7 @@ def settings(options: Options, refine: bool) -> dict:
     def provider(name, model):
         return {"provider": name, "model": model or llm.PROVIDERS.get(name, ("", ""))[1]}
 
-    return {"algorithm": "windowed-cosine-with-refinement", "revision": REVISION,
+    return {"algorithm": ALGORITHM, "revision": REVISION,
             "options": options.model_dump(), "embedding_model": config.EMBEDDING_MODEL,
             "refine": refine, "text_limit": TEXT_LIMIT,
             "primary": provider(config.LLM_PROVIDER, config.LLM_MODEL) if refine else None,
@@ -45,12 +55,10 @@ def settings(options: Options, refine: bool) -> dict:
 
 def build(lecture_id: str, *, options: Options | None = None, refine: bool = True,
           force: bool = False) -> sections.SectionIndex:
-    """Generate once per lecture/settings snapshot. Force retries cached fallback results."""
+    """Generate once per lecture/settings snapshot. Blocking: request handlers use ready()."""
     sections.cache_path(lecture_id)  # validate before allocating a lock or reading sources
     options = options or Options()
-    with _locks_guard:
-        lock = _locks[lecture_id]
-    with lock:
+    with _lock(lecture_id):
         sentences = retrieval.timeline_sources(lecture_id)
         if sentences is None:
             raise LookupError(f"no transcript for {lecture_id}")
@@ -60,6 +68,72 @@ def build(lecture_id: str, *, options: Options | None = None, refine: bool = Tru
         index = generate(lecture_id, sentences, options=options, refine=refine)
         sections.save_index(index, segmentation=metadata)
         return index
+
+
+def _stored(lecture_id, sentences):
+    """Any cache from this revision is usable, whatever options the preprocessing script chose."""
+    metadata = sections.stored_settings(lecture_id)
+    if not metadata or metadata.get("algorithm") != ALGORITHM or metadata.get("revision") != REVISION:
+        return None
+    index = sections.load_index(lecture_id, sentences, segmentation=metadata)
+    return (index, metadata) if index is not None else None
+
+
+def ready(lecture_id: str) -> sections.SectionIndex | None:
+    """Cached sections without blocking; missing or fallback ones are (re)built in the background."""
+    sections.cache_path(lecture_id)
+    sentences = retrieval.timeline_sources(lecture_id)
+    if sentences is None:
+        raise LookupError(f"no transcript for {lecture_id}")
+    saved = _stored(lecture_id, sentences)
+    if saved is None or saved[0].fallback:
+        _schedule(lecture_id)
+    return saved[0] if saved else None
+
+
+def _schedule(lecture_id):
+    now = time.monotonic()
+    with _locks_guard:
+        if lecture_id in _pending or now < _retry_at.get(lecture_id, 0):
+            return
+        _pending.add(lecture_id)
+        _retry_at[lecture_id] = now + RETRY_SECONDS
+    _spawn(lambda: _background(lecture_id))
+
+
+def _spawn(task):
+    threading.Thread(target=task, daemon=True).start()
+
+
+def _background(lecture_id):
+    try:
+        sentences = retrieval.timeline_sources(lecture_id)
+        if sentences is None:
+            return
+        if _stored(lecture_id, sentences) is None:
+            build(lecture_id)
+        else:
+            _retry_refinement(lecture_id)
+    except Exception:
+        log.exception("Background section build failed for %s", lecture_id)
+    finally:
+        with _locks_guard:
+            _pending.discard(lecture_id)
+
+
+def _retry_refinement(lecture_id):
+    """Refine a cached fallback from its stored boundaries; embeddings are not recomputed."""
+    with _lock(lecture_id):
+        sentences = retrieval.timeline_sources(lecture_id)
+        saved = _stored(lecture_id, sentences) if sentences is not None else None
+        if saved is None or not saved[0].fallback:
+            return
+        index, metadata = saved
+        positions = {source_id(s): i for i, s in enumerate(sentences)}
+        starts = [positions[section.sentence_ids[0]] for section in index.sections]
+        starts, titles, complete = _refine(sentences, starts, Options(**metadata["options"]))
+        if complete:
+            sections.save_index(_index(lecture_id, sentences, starts, titles), segmentation=metadata)
 
 
 def _index(lecture_id, sentences, starts, titles=None):
@@ -144,34 +218,47 @@ def _refine(sentences, starts, options):
         batch.append(record)
     if batch:
         batches.append(batch)
-    chosen = {}
+    decided, complete = [], True
     for batch in batches:
-        reply = llm.complete(PROMPT + json.dumps(batch), json=True)
-        decisions = reply.get("decisions") if isinstance(reply, dict) else None
-        if not isinstance(decisions, list) or len(decisions) != len(batch):
-            raise ValueError("incomplete boundary decisions")
-        for decision, record in zip(decisions, batch):
-            if not isinstance(decision, dict) or decision.get("candidate_id") != record["candidate_id"]:
-                raise ValueError("unknown or reordered candidate")
-            if "start_id" not in decision:
-                raise ValueError("missing boundary decision")
-            start = decision["start_id"]
-            if start is None and not record["opening"]:
-                continue
-            title = decision.get("title")
-            if start not in record["allowed_start_ids"] or not isinstance(title, str) or not title.strip() or len(title) > 80:
-                raise ValueError("invalid refined boundary")
-            position = by_id[start]
-            if position in chosen or (chosen and position <= max(chosen)):
-                raise ValueError("overlapping or unordered refined boundaries")
-            chosen[position] = title.strip()
-    refined = list(chosen)
-    if not refined or refined[0] != 0:
-        raise ValueError("missing opening boundary")
-    if len(refined) > 1 and any(not _spaced(a, b, sentences, options)
-                                for a, b in zip(refined, refined[1:] + [len(sentences)])):
-        raise ValueError("refinement creates overly dense sections")
-    return refined, list(chosen.values())
+        try:
+            reply = llm.complete(PROMPT + json.dumps(batch), json=True)
+            decisions = reply.get("decisions") if isinstance(reply, dict) else None
+            if not isinstance(decisions, list) or len(decisions) != len(batch):
+                raise ValueError("incomplete boundary decisions")
+        except (llm.LLMError, ValueError, TypeError, KeyError):
+            # A failed request keeps its own candidates; other batches stay refined.
+            decisions, complete = [None] * len(batch), False
+        decided += [_decision(decision, record, by_id) for decision, record in zip(decisions, batch)]
+    starts, titles = [], []
+    for position, title, candidate in decided:
+        if position is None:
+            continue
+        # A move that crowds its neighbour reverts to the candidate; failing that, it merges.
+        for choice, label in ((position, title), (candidate, None)):
+            if not starts or (choice > starts[-1] and _spaced(starts[-1], choice, sentences, options)):
+                starts.append(choice)
+                titles.append(label)
+                break
+    while len(starts) > 1 and not _spaced(starts[-1], len(sentences), sentences, options):
+        starts.pop()
+        titles.pop()
+    return starts, titles, complete
+
+
+def _decision(decision, record, by_id):
+    """(position, title, candidate). Unusable decisions keep the candidate; unusable titles become None."""
+    candidate = by_id[record["candidate_id"]]
+    if (not isinstance(decision, dict) or decision.get("candidate_id") != record["candidate_id"]
+            or "start_id" not in decision):
+        return candidate, None, candidate
+    start, title = decision["start_id"], decision.get("title")
+    if start is None and not record["opening"]:
+        return None, None, candidate
+    if not isinstance(title, str) or not title.strip() or len(title) > 80:
+        title = None
+    if not isinstance(start, str) or start not in record["allowed_start_ids"]:
+        return candidate, title, candidate
+    return by_id[start], title and title.strip(), candidate
 
 
 def generate(lecture_id: str, sentences: list[Chunk], *, options: Options | None = None,
@@ -182,11 +269,14 @@ def generate(lecture_id: str, sentences: list[Chunk], *, options: Options | None
     if not sentences:
         return original
     starts = semantic_starts(sentences, store._embed([s.text for s in sentences]), options)
-    provisional = _index(lecture_id, sentences, starts)
+    titles, complete = None, True
     if refine:
         try:
-            refined, titles = _refine(sentences, starts, options)
-            return _index(lecture_id, sentences, refined, titles)
-        except (llm.LLMError, ValueError, TypeError, KeyError):
-            log.warning("Section refinement unavailable; retaining semantic boundaries")
-    return provisional
+            starts, titles, complete = _refine(sentences, starts, options)
+        except ValueError:  # a candidate's context exceeds the prompt budget
+            complete = False
+        if not complete:
+            log.warning("Section refinement incomplete; unrefined boundaries keep extracted titles")
+    index = _index(lecture_id, sentences, starts, titles)
+    index.fallback = not complete  # cached, but ready() retries it in the background
+    return index

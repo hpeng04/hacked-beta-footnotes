@@ -11,8 +11,9 @@ log = logging.getLogger(__name__)
 
 def section_index(lecture_id):
     try:
-        return segmentation.build(lecture_id)
-    except (LookupError, ValueError, RuntimeError, OSError, ImportError):
+        # Never build inside a request: until sections exist, callers use their fallbacks.
+        return segmentation.ready(lecture_id)
+    except (LookupError, ValueError, RuntimeError, OSError):
         log.warning("Section membership unavailable; using existing timing fallback")
         return None
 

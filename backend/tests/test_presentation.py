@@ -10,7 +10,7 @@ def example(monkeypatch):
     index = sections.build_index('lec', sources, [
         sections.SectionDraft(title='Memory', sentence_ids=[source_id(s) for s in sources[:3]]),
         sections.SectionDraft(title='Allocation', sentence_ids=[source_id(sources[3])])])
-    monkeypatch.setattr(presentation.segmentation, 'build', lambda *a: index)
+    monkeypatch.setattr(presentation.segmentation, 'ready', lambda *a: index)
     return sources, index
 
 
@@ -38,7 +38,7 @@ def test_replay_starts_at_first_cited_sentence_not_section_start(example):
 def test_adjacent_different_sections_stay_distinct(monkeypatch):
     sources = [Chunk(lecture_id='lec',start=s,end=s+1,text=str(s)) for s in [51,53]]
     index=sections.build_index('lec',sources,[sections.SectionDraft(title=str(i),sentence_ids=[source_id(s)]) for i,s in enumerate(sources)])
-    monkeypatch.setattr(presentation.segmentation,'build',lambda *a:index)
+    monkeypatch.setattr(presentation.segmentation,'ready',lambda *a:index)
     answer=AskResponse(answer='Claim',sources=sources,sentences=[AnswerSentence(text='Claim.',sources=sources)])
     assert len(presentation.with_citations('lec',answer).citations)==2
 

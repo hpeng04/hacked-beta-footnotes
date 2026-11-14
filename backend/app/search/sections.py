@@ -45,6 +45,7 @@ class SectionIndex(BaseModel):
     lecture_id: str
     sentences: list[Sentence]
     sections: list[TopicSection]
+    fallback: bool = False  # refinement was requested but incomplete; worth retrying later
 
     @model_validator(mode="after")
     def validate_membership(self):
@@ -104,6 +105,16 @@ def cache_path(lecture_id: str) -> Path:
     if not config.is_valid_lecture_id(lecture_id):
         raise ValueError("invalid lecture ID")
     return config.CACHE_DIR / f"{lecture_id}.sections.json"
+
+
+def stored_settings(lecture_id: str) -> dict | None:
+    """The segmentation settings a cache was built with, so readers can accept any build."""
+    try:
+        data = json.loads(cache_path(lecture_id).read_text())
+    except (FileNotFoundError, ValueError):
+        return None
+    settings = data.get("segmentation") if isinstance(data, dict) else None
+    return settings if isinstance(settings, dict) else None
 
 
 def _fingerprint(lecture_id: str, sentences: list[Chunk], segmentation: dict[str, JsonValue]) -> str:

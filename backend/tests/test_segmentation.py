@@ -209,3 +209,60 @@ def test_cli_builds_local_sections_and_reports_unknown_lecture(lecture, capsys):
     output = capsys.readouterr().out
     assert "lec: 2 sections, 8 sentences" in output
     assert "unknown: FAILED" in output
+
+
+def test_requests_never_build_and_background_build_fills_the_cache(lecture, monkeypatch):
+    tasks = []
+    monkeypatch.setattr(seg, "_spawn", tasks.append)
+    monkeypatch.setattr(llm, "complete", decisions)
+    assert seg.ready("lec") is None and len(tasks) == 1
+    assert seg.ready("lec") is None and len(tasks) == 1  # one build at a time
+    tasks.pop()()
+    assert [s.title for s in seg.ready("lec").sections] == ["Memory", "Compilation"]
+    assert not tasks
+
+
+def test_cached_fallback_is_served_and_refined_later_without_embedding(lecture, monkeypatch):
+    tasks = []
+    monkeypatch.setattr(seg, "_spawn", tasks.append)
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: (_ for _ in ()).throw(llm.LLMError("offline")))
+    assert seg.build("lec").fallback
+    monkeypatch.setattr(seg.store, "_embed", lambda *a: pytest.fail("retry reuses stored boundaries"))
+    assert seg.ready("lec").sections[0].title == "Sentence 0"
+    tasks.pop()()  # still offline: the fallback stays
+    assert seg.ready("lec").fallback and not tasks  # waits out the cooldown
+    monkeypatch.setattr(seg, "_retry_at", {})
+    monkeypatch.setattr(llm, "complete", decisions)
+    seg.ready("lec")
+    tasks.pop()()
+    refined = seg.ready("lec")
+    assert not refined.fallback and [s.title for s in refined.sections] == ["Memory", "Compilation"]
+    assert not tasks
+
+
+def test_preprocessed_sections_with_other_settings_are_served(lecture, monkeypatch):
+    monkeypatch.setattr(seg, "_spawn", lambda task: pytest.fail("a usable cache must not be rebuilt"))
+    built = seg.build("lec", options=seg.Options(window=2), refine=False)
+    assert seg.ready("lec") == built
+
+
+def test_one_bad_decision_or_batch_keeps_the_rest_of_the_refinement(monkeypatch):
+    sentences = [Chunk(lecture_id="long", start=i * 10, end=(i + 1) * 10, text="A sentence. " * 8) for i in range(40)]
+    vectors = [[1., 0.] if (i // 4) % 2 == 0 else [0., 1.] for i in range(40)]
+    monkeypatch.setattr(seg.store, "_embed", lambda texts: vectors)
+    calls = []
+    def complete(prompt, json=False):
+        calls.append(1)
+        if len(calls) == 2:
+            raise llm.LLMError("rate limited")
+        result = decisions(prompt)
+        if len(calls) == 1:
+            result["decisions"][1]["title"] = "x" * 81
+        return result
+    monkeypatch.setattr(llm, "complete", complete)
+    index = seg.generate("long", sentences, options=seg.Options(context=1, max_prompt_chars=2500))
+    titles = [s.title for s in index.sections]
+    assert len(calls) > 2 and index.fallback
+    assert [s.start for s in index.sections] == list(range(0, 400, 40))
+    assert titles[0] == "Memory" and titles[-1] == "Compilation"
+    assert titles[1] != "x" * 81 and titles.count("Compilation") < len(titles) - 1
