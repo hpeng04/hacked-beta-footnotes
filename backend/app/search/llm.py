@@ -123,7 +123,7 @@ def answer(question: str, sources: list[Chunk]) -> str:
     return answer_result(question, sources).answer
 
 
-def answer_result(question: str, sources: list[Chunk]) -> AskResponse:
+def answer_result(question: str, sources: list[Chunk], *, preserve_evidence: bool = False) -> AskResponse:
     if not sources:
         return AskResponse(answer="Nothing in this lecture matches that question.", sources=[])
     by_id = {source_id(c): c for c in sorted(sources, key=lambda c: c.start)}
@@ -132,14 +132,14 @@ def answer_result(question: str, sources: list[Chunk]) -> AskResponse:
         question=question,
     )
     try:
-        return _parse_answer(complete(prompt, json=True), by_id)
+        return _parse_answer(complete(prompt, json=True), by_id, preserve_evidence=preserve_evidence)
     except (LLMError, ValueError, TypeError, KeyError):
         # A failed/invalid model reply must not turn into an ungrounded timestamp
         # or dump a search chunk into the answer.
         return AskResponse(answer=UNAVAILABLE, sources=[])
 
 
-def _parse_answer(reply, by_id: dict[str, Chunk]) -> AskResponse:
+def _parse_answer(reply, by_id: dict[str, Chunk], *, preserve_evidence: bool = False) -> AskResponse:
     if not isinstance(reply, dict) or not isinstance(reply.get("sentences"), list):
         raise ValueError("expected answer sentences")
     if not reply["sentences"]:
@@ -164,7 +164,9 @@ def _parse_answer(reply, by_id: dict[str, Chunk]) -> AskResponse:
             raise ValueError("empty answer text")
         cited.update(selected)
         sentences.append(AnswerSentence(text=text.strip(), sources=list(selected.values())))
-    sentences, sources = _group_citations(sentences, list(cited.values()))
+    sources = sorted(cited.values(), key=lambda c: c.start)
+    if not preserve_evidence:
+        sentences, sources = group_citations(sentences, sources)
     rendered = " ".join(
         f"{s.text} " + " ".join(f"[{fmt_time(c.start)}]" for c in s.sources)
         for s in sentences
@@ -172,7 +174,7 @@ def _parse_answer(reply, by_id: dict[str, Chunk]) -> AskResponse:
     return AskResponse(answer=rendered, sources=sources, sentences=sentences)
 
 
-def _group_citations(sentences: list[AnswerSentence], sources: list[Chunk]):
+def group_citations(sentences: list[AnswerSentence], sources: list[Chunk]):
     """One replay point for a nearby passage, bounded to avoid chaining chapters."""
     groups: list[list[Chunk]] = []
     for source in sorted(sources, key=lambda c: c.start):

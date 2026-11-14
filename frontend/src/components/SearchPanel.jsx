@@ -2,7 +2,36 @@ import { useState } from "react";
 import { ask } from "../api.js";
 import { fmt } from "./TimelineBar.jsx";
 
-function AnswerText({ answer, sources, sentences, onSeek }) {
+function AnswerText({ answer, sources, sentences, citations, onSeek }) {
+  if (citations != null) {
+    const numbers = new Map(citations.map((citation, index) => [citation.id, index + 1]));
+    return <>
+      {sentences?.length ? sentences.map((sentence, index) => (
+        <span key={index}>
+          {index > 0 && " "}{sentence.text}
+          {(sentence.citation_ids ?? []).filter(id => numbers.has(id)).map(id => {
+            const citation = citations[numbers.get(id) - 1];
+            return <button key={id} type="button" className="citation-marker"
+              aria-label={`Source ${numbers.get(id)}: replay ${citation.title} at ${fmt(citation.start)}`}
+              onClick={() => onSeek(citation.start)}>
+              {numbers.get(id)}
+            </button>;
+          })}
+        </span>
+      )) : answer}
+      {citations.length > 0 && <ol className="answer-citations">
+        {citations.map((citation, index) => <li key={citation.id}>
+          <span className="citation-number" aria-hidden="true">{index + 1}</span>
+          <button type="button" className="timestamp-chip"
+            aria-label={`Replay ${citation.title} from ${fmt(citation.start)} to ${fmt(citation.end)}`}
+            onClick={() => onSeek(citation.start)}>
+            {fmt(citation.start)}–{fmt(citation.end)}
+          </button>
+          <span className="citation-title">{citation.title}</span>
+        </li>)}
+      </ol>}
+    </>;
+  }
   if (sentences?.length) {
     return sentences.map((sentence, index) => (
       <span key={index}>
@@ -76,7 +105,7 @@ export default function SearchPanel({ lectureId, onSeek }) {
         {result && (
           <div className="answer-note">
             <p className="answer-question">{askedQuestion}</p>
-            <p><AnswerText answer={result.answer} sources={result.sources} sentences={result.sentences} onSeek={onSeek} /></p>
+            <div><AnswerText answer={result.answer} sources={result.sources} sentences={result.sentences} citations={result.citations} onSeek={onSeek} /></div>
           </div>
         )}
         {loading && (

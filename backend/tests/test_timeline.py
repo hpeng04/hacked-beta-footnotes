@@ -144,7 +144,7 @@ def test_truncates_long_titles(fake_llm, chunks):
 
 def test_unknown_ids_do_not_snap_to_unrelated_times(fake_llm, chunks):
     fake_llm.reply("groq", '{"sections": [{"title": "Invented", "start_id": "s_missing"}]}')
-    assert timeline.build("lec")[0].title == "Part 1"
+    assert timeline.build("lec")[0].title == "intro to races"
     assert not timeline.cache_path("lec").exists()
 
 
@@ -160,7 +160,7 @@ def test_unknown_ids_do_not_snap_to_unrelated_times(fake_llm, chunks):
 def test_bad_reply_falls_back_to_fixed_sections(fake_llm, chunks, bad):
     fake_llm.reply("groq", bad)
     sections = timeline.build("lec")
-    assert [s.title for s in sections] == ["Part 1"]
+    assert [s.title for s in sections] == ["intro to races"]
     assert not timeline.cache_path("lec").exists()
 
 
@@ -169,7 +169,7 @@ def test_llm_down_falls_back_in_5_minute_parts(fake_llm, monkeypatch):
     monkeypatch.setattr(store, "get_chunks", lambda lid: long, raising=False)
     fake_llm.reply("groq", httpx.ConnectError("down"))
     fake_llm.reply("generativelanguage", httpx.ConnectError("down"))
-    assert as_tuples(timeline.build("l")) == [("Part 1", 0, 300), ("Part 2", 300, 600), ("Part 3", 600, 700)]
+    assert as_tuples(timeline.build("l")) == [("t", 0, 300), ("t", 300, 600), ("t", 600, 700)]
     assert not timeline.cache_path("l").exists()
 
 

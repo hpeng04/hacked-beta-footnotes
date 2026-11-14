@@ -558,3 +558,41 @@ p {
     animation-duration: 2.4s;
   }
 }
+
+.answer-citations {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.answer-citations li {
+  display: grid;
+  grid-template-columns: 1.25rem auto 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.citation-number {
+  color: var(--muted);
+  font: 600 0.75rem var(--mono);
+  text-align: right;
+}
+.citation-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.citation-marker {
+  margin-left: 2px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font: 600 0.7rem var(--mono);
+  vertical-align: super;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.citation-marker:hover {
+  background: var(--accent-soft-hover);
+}

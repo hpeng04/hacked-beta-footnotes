@@ -20,6 +20,11 @@ def _embed(texts: list[str]) -> list[list[float]]:
     return _model().encode(texts, normalize_embeddings=True).tolist()
 
 
+def embed(texts: list[str]) -> list[list[float]]:
+    """Normalized MiniLM vectors, for callers outside the store."""
+    return _embed(texts)
+
+
 @lru_cache(maxsize=None)
 def _client(path: str):
     import chromadb
