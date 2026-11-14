@@ -100,9 +100,26 @@ Timeline caches record a format version and a fingerprint of their excerpts. Old
 
 The section-membership foundation in `app/search/sections.py` stores a separate `*.sections.json` index for future topic segmentation. It preserves sentence text, float timing, and the existing stable sentence IDs. Each topic section has a title, a membership-derived ID, bounds derived from its sentences, and an ordered list of sentence IDs. Every sentence must belong to exactly one section; sections must be ordered and cannot overlap. Silence between sections is allowed. Retitling a section preserves its ID; changing its membership changes its ID.
 
-The next segmentation stage can call `build_index(lecture_id, sentences, drafts)` with `SectionDraft(title=..., sentence_ids=[...])` proposals, then `save_index(index, segmentation=settings)`. Settings must include nonempty `algorithm` and `revision` strings plus every parameter that affects segmentation (such as model revision, window size, and similarity threshold). `load_index(lecture_id, current_sentences, segmentation=settings)` returns `None` for missing, corrupt, or stale caches, signaling that the caller must regenerate them. Cache validity includes the current sentence snapshot, sentence-building version, segmentation settings, and storage format version. Writes are atomic and invalid replacements preserve the previous cache.
+The segmentation stage calls `build_index(lecture_id, sentences, drafts)` with `SectionDraft(title=..., sentence_ids=[...])` proposals, then `save_index(index, segmentation=settings)`. Settings must include nonempty `algorithm` and `revision` strings plus every parameter that affects segmentation (such as model revision, window size, and similarity threshold). `load_index(lecture_id, current_sentences, segmentation=settings)` returns `None` for missing, corrupt, or stale caches, signaling that the caller must regenerate them. Cache validity includes the current sentence snapshot, sentence-building version, segmentation settings, and storage format version. Writes are atomic and invalid replacements preserve the previous cache.
 
-This foundation does not yet generate topic memberships or change Q&A citation grouping. Topic detection and UI integration are subsequent stages; existing timeline caches remain separate.
+Topic detection is available through `app/search/segmentation.py` and a preprocessing command:
+
+```bash
+cd backend
+.venv/bin/python -m scripts.build_sections LECTURE_ID
+# Use only local embeddings, with neutral section titles:
+.venv/bin/python -m scripts.build_sections LECTURE_ID --semantic-only
+# Retry refinement or regenerate a cached result:
+.venv/bin/python -m scripts.build_sections LECTURE_ID --force
+```
+
+The detector embeds sentences with the existing MiniLM model, compares mean embeddings of neighboring windows, and proposes local similarity minima as topic boundaries. Defaults are a three-sentence window, cosine threshold 0.55, at least two sentences per section, and at least 12 seconds per section. These are heuristic defaults, adjustable through `--window`, `--threshold`, `--min-sentences`, and `--min-seconds`. Continuous topics are not split at fixed time intervals; overlapping speech cannot form a section boundary.
+
+The LLM receives bounded context around candidates and can retain, move to a nearby allowed sentence, or remove each boundary. It must return valid sentence IDs in order, including the opening section. All sentences are then assigned to contiguous groups and validated using the storage layer. Requests are capped at 24,000 characters by default, and batching never creates section boundaries of its own.
+
+Missing or invalid refinement results retain the semantic boundaries and neutral `Part N` titles. That fallback is cached to avoid repeatedly spending model calls; use `--force` to retry refinement. Embedding failures raise an error and preserve the previous cache. Cache fingerprints include the detector settings, embedding model/revision, and configured LLM providers/models; concurrent requests for the same lecture share one generation. Use `segmentation.build(lecture_id, options=Options(...))` from Python to configure context size, prompt budget, or an updated embedding revision.
+
+This stage generates and caches topic memberships. Q&A citation grouping and the timeline UI will consume those memberships in the next stage; existing timeline caches remain separate.
 
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 
