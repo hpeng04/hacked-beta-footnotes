@@ -3,6 +3,7 @@ import re
 
 from .. import mock
 from ..ingestion import pipeline, store
+from ..ingestion.timing import sentence_excerpts
 from ..schemas import Chunk
 
 
@@ -16,17 +17,18 @@ def search(lecture_id: str, query: str, k: int = 5) -> list[Chunk]:
 
 
 def answer_sources(lecture_id: str, candidates: list[Chunk]) -> list[Chunk]:
-    """Use original segment timestamps to cite passages inside retrieved chunks."""
+    """Use aligned sentences to cite passages inside retrieved search chunks."""
     if not candidates:
         return []
-    segments = pipeline.citation_segments(lecture_id)
+    segments = pipeline.citation_timing(lecture_id)
     if segments is None:
         return candidates
     # Preserve retrieval rank for provider-failure fallback; avoid duplicating a
     # segment when overlapping candidate chunks include the same passage.
+    excerpts = sentence_excerpts(segments)
     selected = {}
     for candidate in candidates:
-        for segment in segments:
+        for segment in excerpts:
             if segment.start < candidate.end and segment.end > candidate.start:
                 selected.setdefault((segment.start, segment.end), segment)
     return list(selected.values())
