@@ -2,7 +2,26 @@ import { useState } from "react";
 import { ask } from "../api.js";
 import { fmt } from "./TimelineBar.jsx";
 
-function AnswerText({ answer, sources, onSeek }) {
+function AnswerText({ answer, sources, sentences, onSeek }) {
+  if (sentences?.length) {
+    return sentences.map((sentence, index) => (
+      <span key={index}>
+        {index > 0 && " "}{sentence.text}
+        {sentence.sources.map((source, sourceIndex) => (
+          <span key={sourceIndex}>
+            {" "}<button
+              type="button"
+              className="timestamp-chip answer-timestamp"
+              aria-label={`Replay at ${fmt(source.start)}`}
+              onClick={() => onSeek(source.start)}
+            >
+              [{fmt(source.start)}]
+            </button>
+          </span>
+        ))}
+      </span>
+    ));
+  }
   const byTimestamp = new Map(sources.map((source) => [`[${fmt(source.start)}]`, source]));
   return answer.split(/(\[(?:\d+:)?\d+:\d{2}\])/g).map((part, index) => {
     const source = byTimestamp.get(part);
@@ -57,7 +76,7 @@ export default function SearchPanel({ lectureId, onSeek }) {
         {result && (
           <div className="answer-note">
             <p className="answer-question">{askedQuestion}</p>
-            <p><AnswerText answer={result.answer} sources={result.sources} onSeek={onSeek} /></p>
+            <p><AnswerText answer={result.answer} sources={result.sources} sentences={result.sentences} onSeek={onSeek} /></p>
           </div>
         )}
         {loading && (

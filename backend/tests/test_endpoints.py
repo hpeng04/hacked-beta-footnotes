@@ -19,7 +19,10 @@ def test_search_requires_params(client):
     assert client.get("/search", params={"lecture_id": "demo"}).status_code == 422
 
 
-def test_ask(client):
+def test_ask(client, fake_llm):
+    from app.search import retrieval
+    source = retrieval.search("demo", "what is deadlock")[0]
+    fake_llm.reply_answer("groq", ("Deadlock needs four conditions.", [source]))
     r = client.post("/ask", json={"lecture_id": "demo", "question": "what is deadlock"})
     assert r.status_code == 200
     body = r.json()
@@ -50,7 +53,8 @@ def memory_lecture(monkeypatch):
 
 
 def test_ask_shows_only_cited_parts_of_a_short_video(client, fake_llm, memory_lecture):
-    fake_llm.reply("groq", "Variables have a memory address and pointers store addresses [0:31]. Release allocated memory with free [1:34].")
+    fake_llm.reply_answer("groq", ("Variables have a memory address and pointers store addresses.", [memory_lecture[1]]),
+                          ("Release allocated memory with free.", [memory_lecture[3]]))
     r = client.post("/ask", json={"lecture_id": "c-lecture", "question": "which part talks about memory?"})
     assert r.status_code == 200
     assert r.json()["sources"] == [memory_lecture[i].model_dump() for i in (1, 3)]
@@ -60,16 +64,17 @@ def test_ask_shows_only_cited_parts_of_a_short_video(client, fake_llm, memory_le
 
 
 def test_ask_refusal_does_not_dump_candidate_transcript(client, fake_llm, memory_lecture):
-    fake_llm.reply("groq", "The lecture does not cover that.")
+    fake_llm.reply_answer("groq")
     r = client.post("/ask", json={"lecture_id": "c-lecture", "question": "how does photosynthesis work?"})
     assert r.status_code == 200
     assert r.json()["sources"] == []
 
 
-def test_ask_provider_failure_shows_only_the_fallback_excerpt(client, memory_lecture):
+def test_ask_provider_failure_never_pastes_a_transcript(client, memory_lecture):
     r = client.post("/ask", json={"lecture_id": "c-lecture", "question": "memory?"})
     assert r.status_code == 200
-    assert r.json()["sources"] == [memory_lecture[1].model_dump()]
+    assert r.json()["sources"] == []
+    assert all(c.text not in r.json()["answer"] for c in memory_lecture)
 
 
 def test_ask_cites_actual_memory_segment_instead_of_merged_chunk(client, fake_llm, monkeypatch):
@@ -84,13 +89,33 @@ def test_ask_cites_actual_memory_segment_instead_of_merged_chunk(client, fake_ll
     pipeline.ingest(config.UPLOAD_DIR / "unused.mp4", "precise")
     # The search hit starts at 1:34, but malloc is not spoken until 1:50.
     assert store.get_chunks("precise")[0].start == 94
-    fake_llm.reply("groq", "Then we can allocate 4 bytes to it [1:50].")
+    fake_llm.reply_answer("groq", ("Then we can allocate 4 bytes to it.", [Chunk(lecture_id="precise", **speech[1])]))
     r = client.post("/ask", json={"lecture_id": "precise", "question": "what part talks about memory?"})
     assert r.status_code == 200
     assert r.json()["sources"] == [{"lecture_id": "precise", **speech[1]}]
     assert "[1:50]" in r.json()["answer"]
     prompt = fake_llm.calls[0]["json"]["messages"][0]["content"]
-    assert "(Excerpt at [1:50])\nThen we can allocate" in prompt
+    assert "Then we can allocate" in prompt
+    assert "[1:50]" not in prompt
+
+
+def test_ask_resolves_allocation_sentence_inside_a_segment(client, fake_llm, monkeypatch):
+    # Word boundaries from sample.mp4; the segment begins before this sentence.
+    words = [(110.66, 110.76, " the"), (110.76, 111.0, " type."),
+             (111.3, 111.38, " Then"), (111.38, 111.52, " we"), (111.52, 111.64, " can"),
+             (111.64, 111.96, " allocate"), (111.96, 112.4, " four"), (112.4, 112.66, " bytes"),
+             (112.66, 112.92, " to"), (112.92, 113.08, " it.")]
+    speech = [{"start": 110.66, "end": 113.08, "text": "".join(w[2] for w in words).strip(),
+               "words": [{"start": s, "end": e, "word": t} for s, e, t in words]}]
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: speech)
+    monkeypatch.setattr(store, "_embed", lambda texts: [[1.0, 0.0] for t in texts])
+    pipeline.ingest(config.UPLOAD_DIR / "unused.mp4", "aligned")
+    source = Chunk(lecture_id="aligned", start=111.3, end=113.08, text="Then we can allocate four bytes to it.")
+    fake_llm.reply_answer("groq", ("The allocation example is here.", [source]))
+    body = client.post("/ask", json={"lecture_id": "aligned", "question": "where is memory allocated?"}).json()
+    assert body["answer"] == "The allocation example is here. [1:51]"
+    assert body["sources"] == [source.model_dump()]
+    assert body["sentences"][0]["sources"][0]["start"] == 111.3
 
 
 def test_timeline_shape_and_order(client):

@@ -1,5 +1,5 @@
 """Shared contract. Change it only after telling the whole team."""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Chunk(BaseModel):
@@ -19,9 +19,15 @@ class AskRequest(BaseModel):
     question: str
 
 
+class AnswerSentence(BaseModel):
+    text: str
+    sources: list[Chunk]
+
+
 class AskResponse(BaseModel):
     answer: str
     sources: list[Chunk]
+    sentences: list[AnswerSentence] = Field(default_factory=list)
 
 
 class Section(BaseModel):

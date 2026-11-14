@@ -10,7 +10,7 @@ scripts all run together. Only what lives outside the repo is replaced:
 import pytest
 
 from app import config
-from app.ingestion import store, transcribe
+from app.ingestion import pipeline, store, transcribe
 from scripts import build_timelines, preprocess
 
 from .conftest import BIO_SCRIPT, OS_CHUNKS, OS_SCRIPT, OS_TIMELINE_REPLY, SPEECH, get, needs_ffmpeg, post_video
@@ -35,7 +35,8 @@ def test_full_lecture_journey(client, stub_models, clip, fake_llm):
     hits = get(client, "/search", lecture_id, q="when do threads wait forever in a deadlock").json()
     assert hits[0] == transcript[1]
 
-    fake_llm.reply("groq", "A deadlock is two threads waiting on each other [0:31].")
+    fake_llm.reply_answer("groq", ("A deadlock is two threads waiting on each other.",
+                                   [next(c for c in pipeline.load_segments(lecture_id) if c.start == 31)]))
     answer = client.post("/ask", json={"lecture_id": lecture_id, "question": "What is a deadlock?"}).json()
     assert "[0:31]" in answer["answer"]
     # Search keeps its broad chunk, but the answer cites the original speech segment.

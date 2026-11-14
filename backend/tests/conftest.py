@@ -1,4 +1,5 @@
 """Shared fixtures. No test may reach a real LLM: httpx.post is always faked."""
+import json
 from unittest import mock
 
 import httpx
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app import config
 from app.main import app
+from app.ingestion.timing import source_id
 
 
 class FakeLLM:
@@ -18,6 +20,12 @@ class FakeLLM:
 
     def reply(self, host: str, *items):
         self.replies.setdefault(host, []).extend(items)
+
+    def reply_answer(self, host, *sentences):
+        self.reply(host, json.dumps({"sentences": [
+            {"text": text, "source_ids": [source_id(c) for c in sources]}
+            for text, sources in sentences
+        ]}))
 
     def __call__(self, url, json, headers, timeout):
         self.calls.append({"url": url, "json": json, "headers": headers})
