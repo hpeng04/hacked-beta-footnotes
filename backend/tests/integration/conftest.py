@@ -52,7 +52,7 @@ class StubWhisperModel:
     def __init__(self, name, device=None, compute_type=None):
         self.loaded.append((name, device, compute_type))
 
-    def transcribe(self, path, vad_filter=False):
+    def transcribe(self, path, vad_filter=False, word_timestamps=False):
         with wave.open(path) as w:
             self.heard.append({
                 "channels": w.getnchannels(),
@@ -61,7 +61,8 @@ class StubWhisperModel:
                 "vad_filter": vad_filter,
             })
         script = self.scripts.pop(0)
-        return (SimpleNamespace(start=s, end=e, text=t) for s, e, t in script), SimpleNamespace(language="en")
+        assert word_timestamps
+        return (SimpleNamespace(start=s, end=e, text=t, words=[]) for s, e, t in script), SimpleNamespace(language="en")
 
 
 @pytest.fixture

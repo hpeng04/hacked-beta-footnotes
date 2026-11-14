@@ -277,3 +277,29 @@ def test_failed_timing_recovery_keeps_original_recording_cache(fakes, monkeypatc
     assert pipeline.load_segments("lec") is None
     assert pipeline.load_transcript("lec") == CHUNKS
     assert pipeline.get_status("lec") == {"status": "ready"}
+
+
+def test_word_timing_is_cached_and_survives_reindex(fakes, monkeypatch):
+    words = [{"start": 111.3, "end": 111.96, "word": " Allocate."}]
+    monkeypatch.setattr(pipeline, "transcribe", lambda path: [
+        {"start": 110.66, "end": 115.26, "text": "Allocate.", "words": words},
+    ])
+    pipeline.ingest(Path("video.mp4"), "lec")
+    pipeline.ingest(Path("video.mp4"), "lec")
+    saved = json.loads(pipeline.segments_path("lec").read_text())
+    assert saved["version"] == 2
+    assert saved["segments"][0]["words"] == words
+    assert pipeline.load_timing("lec")[0].words[0].start == 111.3
+
+
+def test_legacy_segment_cache_gets_word_timing_once(fakes, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "uploads")
+    config.UPLOAD_DIR.mkdir()
+    video = config.UPLOAD_DIR / "lec.mp4"
+    video.write_bytes(b"saved video")
+    pipeline._write_json(pipeline.transcript_path("lec"), [c.model_dump() for c in CHUNKS])
+    pipeline._write_json(pipeline.segments_path("lec"), [Chunk(lecture_id="lec", **s).model_dump() for s in SEGMENTS])
+    pipeline.citation_timing("lec")
+    pipeline.citation_timing("lec")
+    assert fakes["transcribe"] == [video]
+    assert pipeline.load_transcript("lec") == CHUNKS
