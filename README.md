@@ -98,6 +98,12 @@ The LLM selects stable excerpt IDs. The backend validates those IDs and supplies
 
 Timeline caches record a format version and a fingerprint of their excerpts. Old caches and changed timing are regenerated automatically when the transcript is available. Long timelines use multiple requests, each with at most 24,000 transcript characters, to retain sentence anchors within free-tier prompt limits. Results are cached only after all requests succeed. `scripts.build_timelines` also upgrades stale caches.
 
+The section-membership foundation in `app/search/sections.py` stores a separate `*.sections.json` index for future topic segmentation. It preserves sentence text, float timing, and the existing stable sentence IDs. Each topic section has a title, a membership-derived ID, bounds derived from its sentences, and an ordered list of sentence IDs. Every sentence must belong to exactly one section; sections must be ordered and cannot overlap. Silence between sections is allowed. Retitling a section preserves its ID; changing its membership changes its ID.
+
+The next segmentation stage can call `build_index(lecture_id, sentences, drafts)` with `SectionDraft(title=..., sentence_ids=[...])` proposals, then `save_index(index, segmentation=settings)`. Settings must include nonempty `algorithm` and `revision` strings plus every parameter that affects segmentation (such as model revision, window size, and similarity threshold). `load_index(lecture_id, current_sentences, segmentation=settings)` returns `None` for missing, corrupt, or stale caches, signaling that the caller must regenerate them. Cache validity includes the current sentence snapshot, sentence-building version, segmentation settings, and storage format version. Writes are atomic and invalid replacements preserve the previous cache.
+
+This foundation does not yet generate topic memberships or change Q&A citation grouping. Topic detection and UI integration are subsequent stages; existing timeline caches remain separate.
+
 Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
 
 ```bash

@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 from ..schemas import Chunk
 
+SENTENCE_EXCERPT_VERSION = 1  # bump when sentence construction rules change
+
 
 class Word(BaseModel):
     start: float
