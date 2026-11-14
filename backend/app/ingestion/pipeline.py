@@ -106,6 +106,9 @@ def _write_json(path: Path, data) -> None:
         raise
 
 
+write_json = _write_json  # public name: other packages cache through the same atomic writer
+
+
 def load_transcript(lecture_id: str) -> list[Chunk] | None:
     """Cached chunks of a lecture, or None if it hasn't been transcribed."""
     path = transcript_path(lecture_id)

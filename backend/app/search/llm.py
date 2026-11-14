@@ -166,7 +166,7 @@ def _parse_answer(reply, by_id: dict[str, Chunk], *, preserve_evidence: bool = F
         sentences.append(AnswerSentence(text=text.strip(), sources=list(selected.values())))
     sources = sorted(cited.values(), key=lambda c: c.start)
     if not preserve_evidence:
-        sentences, sources = _group_citations(sentences, sources)
+        sentences, sources = group_citations(sentences, sources)
     rendered = " ".join(
         f"{s.text} " + " ".join(f"[{fmt_time(c.start)}]" for c in s.sources)
         for s in sentences
@@ -174,7 +174,7 @@ def _parse_answer(reply, by_id: dict[str, Chunk], *, preserve_evidence: bool = F
     return AskResponse(answer=rendered, sources=sources, sentences=sentences)
 
 
-def _group_citations(sentences: list[AnswerSentence], sources: list[Chunk]):
+def group_citations(sentences: list[AnswerSentence], sources: list[Chunk]):
     """One replay point for a nearby passage, bounded to avoid chaining chapters."""
     groups: list[list[Chunk]] = []
     for source in sorted(sources, key=lambda c: c.start):

@@ -266,3 +266,26 @@ def test_one_bad_decision_or_batch_keeps_the_rest_of_the_refinement(monkeypatch)
     assert [s.start for s in index.sections] == list(range(0, 400, 40))
     assert titles[0] == "Memory" and titles[-1] == "Compilation"
     assert titles[1] != "x" * 81 and titles.count("Compilation") < len(titles) - 1
+
+
+def test_repeated_requests_reuse_the_validated_index(lecture, monkeypatch):
+    built = seg.build("lec", refine=False)
+    assert seg.ready("lec") == built
+    monkeypatch.setattr(sections, "load_index", lambda *a, **k: pytest.fail("unchanged cache is not reloaded"))
+    assert seg.ready("lec") == built
+    monkeypatch.undo()
+
+
+def test_changed_transcript_invalidates_the_loaded_index(lecture, monkeypatch):
+    sentences, _ = lecture
+    seg.build("lec", refine=False)
+    assert seg.ready("lec") is not None
+    sentences[0] = sentences[0].model_copy(update={"text": "Edited."})
+    assert seg.ready("lec") is None
+
+
+def test_unknown_lectures_do_not_allocate_locks(lecture):
+    before = len(seg._locks)
+    with pytest.raises(LookupError):
+        seg.build("unknown")
+    assert len(seg._locks) == before

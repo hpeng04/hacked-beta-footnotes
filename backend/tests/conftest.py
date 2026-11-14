@@ -52,6 +52,7 @@ def fake_llm(request, monkeypatch, tmp_path):
     from app.search import segmentation
     monkeypatch.setattr(segmentation, "_spawn", lambda task: None)  # no threads outliving a test
     monkeypatch.setattr(segmentation, "_retry_at", {})
+    monkeypatch.setattr(segmentation, "_loaded", {})
     monkeypatch.setattr(config, "CHROMA_DIR", tmp_path / "chroma")  # nor the real vector DB
     if request.node.get_closest_marker("live") or request.node.get_closest_marker("ollama"):
         return None  # live tests use the real network and the settings from backend/.env

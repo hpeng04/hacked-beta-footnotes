@@ -24,6 +24,7 @@ _locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 _locks_guard = threading.Lock()
 _pending: set[str] = set()
 _retry_at: dict[str, float] = {}
+_loaded: dict[str, tuple] = {}  # lecture -> (cache file stamp, sentences, index, settings)
 
 
 def _lock(lecture_id: str) -> threading.Lock:
@@ -56,8 +57,10 @@ def settings(options: Options, refine: bool) -> dict:
 def build(lecture_id: str, *, options: Options | None = None, refine: bool = True,
           force: bool = False) -> sections.SectionIndex:
     """Generate once per lecture/settings snapshot. Blocking: request handlers use ready()."""
-    sections.cache_path(lecture_id)  # validate before allocating a lock or reading sources
+    sections.cache_path(lecture_id)  # validate before reading sources
     options = options or Options()
+    if retrieval.timeline_sources(lecture_id) is None:  # unknown lectures never get a lock
+        raise LookupError(f"no transcript for {lecture_id}")
     with _lock(lecture_id):
         sentences = retrieval.timeline_sources(lecture_id)
         if sentences is None:
@@ -72,11 +75,23 @@ def build(lecture_id: str, *, options: Options | None = None, refine: bool = Tru
 
 def _stored(lecture_id, sentences):
     """Any cache from this revision is usable, whatever options the preprocessing script chose."""
+    try:
+        stat = sections.cache_path(lecture_id).stat()
+    except FileNotFoundError:
+        _loaded.pop(lecture_id, None)
+        return None
+    stamp = (stat.st_mtime_ns, stat.st_size)
+    memo = _loaded.get(lecture_id)
+    if memo and memo[0] == stamp and memo[1] == sentences:
+        return memo[2], memo[3]  # unchanged file and transcript: skip parsing, hashing and validation
     metadata = sections.stored_settings(lecture_id)
     if not metadata or metadata.get("algorithm") != ALGORITHM or metadata.get("revision") != REVISION:
         return None
     index = sections.load_index(lecture_id, sentences, segmentation=metadata)
-    return (index, metadata) if index is not None else None
+    if index is None:
+        return None
+    _loaded[lecture_id] = (stamp, list(sentences), index, metadata)
+    return index, metadata
 
 
 def ready(lecture_id: str) -> sections.SectionIndex | None:
@@ -268,7 +283,7 @@ def generate(lecture_id: str, sentences: list[Chunk], *, options: Options | None
     original = _index(lecture_id, sentences, [0] if sentences else [])
     if not sentences:
         return original
-    starts = semantic_starts(sentences, store._embed([s.text for s in sentences]), options)
+    starts = semantic_starts(sentences, store.embed([s.text for s in sentences]), options)
     titles, complete = None, True
     if refine:
         try:

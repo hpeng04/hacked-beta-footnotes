@@ -34,7 +34,7 @@ def with_citations(lecture_id, answer):
                                           start=source.start, end=topics[key].end)
                             for key, source in grouped.items()]
     else:
-        _, passages = llm._group_citations(answer.sentences, answer.sources)
+        _, passages = llm.group_citations(answer.sentences, answer.sources)
         answer.citations = [ReplayCitation(section_id=source_id(p), title=context_title([p]), start=p.start, end=p.end)
                             for p in passages]
     # Evidence stays intact; plain-text clients also receive deduplicated links.

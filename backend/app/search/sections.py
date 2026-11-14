@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from .. import config
 from ..ingestion import timing
-from ..ingestion.pipeline import _write_json
+from ..ingestion.pipeline import write_json
 from ..schemas import Chunk
 
 CACHE_VERSION = 1
@@ -130,7 +130,7 @@ def save_index(index: SectionIndex, *, segmentation: dict[str, JsonValue]) -> No
     # Revalidate even models mutated after construction. Invalid writes preserve the old cache.
     index = SectionIndex.model_validate(index.model_dump())
     fingerprint = _fingerprint(index.lecture_id, [s.chunk() for s in index.sentences], segmentation)
-    _write_json(cache_path(index.lecture_id), {
+    write_json(cache_path(index.lecture_id), {
         "version": CACHE_VERSION, "fingerprint": fingerprint,
         "segmentation": segmentation, "index": index.model_dump(),
     })
