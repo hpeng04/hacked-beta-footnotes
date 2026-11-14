@@ -50,6 +50,8 @@ npm install
 npm run dev
 ```
 
+API test page (no build): open `frontend/test.html` in a browser with the backend running. It exercises every endpoint.
+
 ## Tests
 
 All from `backend/`. No test needs a model download or an API key unless marked.
