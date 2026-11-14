@@ -1,7 +1,25 @@
 import { useState } from "react";
 import { ask } from "../api.js";
+import { fmt } from "./TimelineBar.jsx";
 
-const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+function AnswerText({ answer, sources, onSeek }) {
+  const byTimestamp = new Map(sources.map((source) => [`[${fmt(source.start)}]`, source]));
+  return answer.split(/(\[(?:\d+:)?\d+:\d{2}\])/g).map((part, index) => {
+    const source = byTimestamp.get(part);
+    if (!source) return part;
+    return (
+      <button
+        key={index}
+        type="button"
+        className="timestamp-chip answer-timestamp"
+        aria-label={`Replay at ${fmt(source.start)}`}
+        onClick={() => onSeek(source.start)}
+      >
+        {part}
+      </button>
+    );
+  });
+}
 
 export default function SearchPanel({ lectureId, onSeek }) {
   const [question, setQuestion] = useState("");
@@ -37,33 +55,10 @@ export default function SearchPanel({ lectureId, onSeek }) {
           </p>
         )}
         {result && (
-          <>
-            <div className="answer-note">
-              <p className="answer-question">{askedQuestion}</p>
-              <p>{result.answer}</p>
-            </div>
-
-            {result.sources.length > 0 && (
-              <>
-                <h3 className="source-heading">From the transcript</h3>
-                <ul className="sources">
-                  {result.sources.map((c) => (
-                    <li key={c.start}>
-                      <button
-                        type="button"
-                        className="timestamp-chip"
-                        aria-label={`Replay at ${fmt(c.start)}`}
-                        onClick={() => onSeek(c.start)}
-                      >
-                        <span aria-hidden="true">▶</span> {fmt(c.start)}
-                      </button>
-                      <span>{c.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </>
+          <div className="answer-note">
+            <p className="answer-question">{askedQuestion}</p>
+            <p><AnswerText answer={result.answer} sources={result.sources} onSeek={onSeek} /></p>
+          </div>
         )}
         {loading && (
           <p className="panel-status" role="status">
