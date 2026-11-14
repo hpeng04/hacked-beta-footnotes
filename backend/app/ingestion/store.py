@@ -1,10 +1,12 @@
 """Person 1 writes, Person 2 reads: embeddings and the vector DB."""
+import threading
 from functools import lru_cache
 
 from .. import config
 from ..schemas import Chunk
 
 COLLECTION = "chunks"
+_lock = threading.Lock()  # endpoints run in a threadpool; Chroma client creation isn't thread-safe
 
 
 @lru_cache(maxsize=1)
@@ -28,8 +30,9 @@ def _client(path: str):
 
 def _collection():
     # CHROMA_DIR is read on every call so tests can point it at a temp dir
-    client = _client(str(config.CHROMA_DIR))
-    return client.get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
+    with _lock:
+        client = _client(str(config.CHROMA_DIR))
+        return client.get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
 
 
 def _to_chunk(text: str, meta: dict) -> Chunk:
