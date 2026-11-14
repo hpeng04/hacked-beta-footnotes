@@ -24,5 +24,13 @@ def add_chunks(chunks: list[Chunk]) -> None:
 
 
 def query(lecture_id: str, text: str, k: int = 5) -> list[Chunk]:
-    # TODO later
-    raise NotImplementedError
+    embedding = _model.encode([text]).tolist()
+    res = _collection.query(
+        query_embeddings=embedding,
+        n_results=k,
+        where={"lecture_id": lecture_id},
+    )
+    chunks = []
+    for doc, meta in zip(res["documents"][0], res["metadatas"][0]):
+        chunks.append(Chunk(lecture_id=meta["lecture_id"], start=meta["start"], end=meta["end"], text=doc))
+    return chunks
