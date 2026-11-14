@@ -127,6 +127,20 @@ REFUSAL = re.compile(r"\b(no|not|nothing|cannot|can't|unable|doesn't|don't|isn't
 CITATION = re.compile(r"\[((?:\d+:)?\d+:\d\d)\]")
 
 
+def cited_sources(reply: str, candidates: list[Chunk]) -> list[Chunk]:
+    """Return only excerpts used in the answer, in transcript order.
+
+    Retrieval candidates provide context for the model; displaying them all can
+    reproduce an entire short lecture even when the answer uses just one part.
+    An uncited answer (including a refusal) has no supporting excerpts to show.
+    """
+    cited = set(CITATION.findall(reply))
+    return sorted(
+        (c for c in candidates if fmt_time(c.start) in cited),
+        key=lambda c: c.start,
+    )
+
+
 def _content_words(text: str) -> set[str]:
     return set(re.findall(r"[a-z]{3,}", CITATION.sub(" ", text.lower()))) - STOPWORDS
 
