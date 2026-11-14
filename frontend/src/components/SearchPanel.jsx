@@ -4,12 +4,12 @@ import { fmt } from "./TimelineBar.jsx";
 
 function AnswerText({ answer, sources, sentences, citations, onSeek }) {
   if (citations != null) {
-    const numbers = new Map(citations.map((citation, index) => [citation.section_id, index + 1]));
+    const numbers = new Map(citations.map((citation, index) => [citation.id, index + 1]));
     return <>
       {sentences?.length ? sentences.map((sentence, index) => (
         <span key={index}>
           {index > 0 && " "}{sentence.text}
-          {(sentence.section_ids ?? []).filter(id => numbers.has(id)).map(id => {
+          {(sentence.citation_ids ?? []).filter(id => numbers.has(id)).map(id => {
             const citation = citations[numbers.get(id) - 1];
             return <button key={id} type="button" className="citation-marker"
               aria-label={`Source ${numbers.get(id)}: replay ${citation.title} at ${fmt(citation.start)}`}
@@ -20,12 +20,12 @@ function AnswerText({ answer, sources, sentences, citations, onSeek }) {
         </span>
       )) : answer}
       {citations.length > 0 && <ol className="answer-citations">
-        {citations.map((citation, index) => <li key={citation.section_id}>
+        {citations.map((citation, index) => <li key={citation.id}>
           <span className="citation-number" aria-hidden="true">{index + 1}</span>
           <button type="button" className="timestamp-chip"
-            aria-label={`Replay ${citation.title} at ${fmt(citation.start)}`}
+            aria-label={`Replay ${citation.title} from ${fmt(citation.start)} to ${fmt(citation.end)}`}
             onClick={() => onSeek(citation.start)}>
-            {fmt(citation.start)}
+            {fmt(citation.start)}–{fmt(citation.end)}
           </button>
           <span className="citation-title">{citation.title}</span>
         </li>)}

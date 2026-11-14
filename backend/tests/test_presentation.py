@@ -26,9 +26,10 @@ def test_nonconsecutive_references_deduplicate_globally_without_losing_evidence(
     kept = lambda dumped: [{k: s[k] for k in ('text', 'sources')} for s in dumped['sentences']]
     assert kept(result.model_dump()) == kept(before)
     first, second = (s.id for s in example[1].sections)
-    assert [s.section_ids for s in result.sentences] == [[first], [second], [first]]
+    assert [s.citation_ids for s in result.sentences] == [[first], [second], [first]]
+    assert [c.section_id for c in result.citations] == [first, second]
     assert result.model_dump()['sources'] == before['sources']
-    assert result.answer.count('[0:51]') == 1
+    assert result.answer.endswith('[0:51 Memory] [1:51 Allocation]')
     assert '[0:54]' not in result.answer
 
 
@@ -52,7 +53,9 @@ def test_fallback_preserves_sentence_evidence(example, monkeypatch):
     answer=AskResponse(answer='Claim',sources=sources,sentences=[AnswerSentence(text='Claim.',sources=sources)])
     citations=presentation.with_citations('lec',answer).citations
     assert len(citations)==2
-    assert answer.sentences[0].section_ids==[c.section_id for c in citations]
+    assert answer.sentences[0].citation_ids==[c.id for c in citations]
+    assert all(c.section_id is None and c.id.startswith('s_') for c in citations)
+    assert answer.answer=='Claim. [0:51] [1:51]'
     assert answer.sources==sources
 
 

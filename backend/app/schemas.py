@@ -22,11 +22,12 @@ class AskRequest(BaseModel):
 class AnswerSentence(BaseModel):
     text: str
     sources: list[Chunk]
-    section_ids: list[str] = Field(default_factory=list)  # citations (by section_id) backing this sentence
+    citation_ids: list[str] = Field(default_factory=list)  # ReplayCitation.id values backing this sentence
 
 
 class ReplayCitation(BaseModel):
-    section_id: str
+    id: str  # unique within one answer; AnswerSentence.citation_ids refer to it
+    section_id: str | None  # the detected topic section, or None when sections are unavailable
     title: str
     start: float
     end: float
