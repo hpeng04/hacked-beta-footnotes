@@ -6,7 +6,7 @@ from .config import UPLOAD_DIR
 from .ingestion.router import router as ingestion_router
 from .search.router import router as search_router
 
-app = FastAPI(title="LectureLens")
+app = FastAPI(title="TimeStamp")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(ingestion_router)

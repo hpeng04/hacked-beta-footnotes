@@ -50,6 +50,54 @@ npm install
 npm run dev
 ```
 
+API test page (no build): open `frontend/test.html` in a browser with the backend running. It exercises every endpoint.
+
+## Tests
+
+All from `backend/`. No test needs a model download or an API key unless marked.
+
+| Suite | Command | What it covers |
+|---|---|---|
+| Everything fast | `.venv/bin/python -m pytest` | all suites below |
+| Unit | `.venv/bin/python -m pytest --ignore=tests/integration` | each module alone, neighbours faked |
+| Top-down integration | `.venv/bin/python -m pytest tests/integration/test_top_down.py` | starts at the API with everything below stubbed, then swaps in one real module per level |
+| Big bang integration | `.venv/bin/python -m pytest tests/integration/test_big_bang.py` | the whole backend at once: real ffmpeg, Chroma, cache and scripts; only the models and the LLM are stubbed |
+| Real models | `.venv/bin/python -m pytest -m models` | big bang with the real Whisper and embedding models (slow, downloads them) |
+
+The integration tests need `ffmpeg`; tests that use it are skipped without it.
+
+## Demo lectures
+
+Transcripts and timelines of the demo lectures are committed in `backend/data/cache`. The videos and the vector DB are not.
+
+After cloning or pulling new transcripts, rebuild the vector DB (no Whisper run):
+
+```bash
+cd backend && .venv/bin/python -m scripts.preprocess --reindex
+```
+
+Put each demo video in `backend/data/uploads/` as `<lecture_id>.mp4`; it is then served at `/media/<lecture_id>.mp4`.
+
+To add a demo lecture (needs `ffmpeg`; transcription is slow on CPU):
+
+```bash
+cd backend && .venv/bin/python -m scripts.preprocess path/to/lecture.mp4 LECTURE_ID --model small
+```
+
+```bash
+cd backend && .venv/bin/python -m scripts.build_timelines LECTURE_ID
+```
+
+Then commit `data/cache/LECTURE_ID.transcript.json` and `data/cache/LECTURE_ID.timeline.json`. Give demo lectures a named id such as `os-lecture`: cache files of live uploads (ids of 8 hex characters) are git-ignored.
+
+Before the demo, on the demo machine, download and load the models once so the first live upload doesn't wait on a download:
+
+```bash
+cd backend && .venv/bin/python -m scripts.preprocess --warmup
+```
+
+Live uploads use `WHISPER_MODEL` from `.env` (`base` in `.env.example`); `--model` overrides it for one run of the script.
+
 ## Team task division
 
 ### Person 1 — Ingestion
@@ -90,10 +138,13 @@ API:
 | Endpoint | Owner | Returns |
 |---|---|---|
 | `POST /upload` | Person 1 | `lecture_id`, `video_url` |
+| `GET /status?lecture_id=` | Person 1 | `lecture_id`, `status` (`processing`, `ready` or `failed`), `error` |
 | `GET /transcript?lecture_id=` | Person 1 | all chunks |
 | `GET /search?lecture_id=&q=` | Person 2 | matching chunks |
 | `POST /ask` | Person 2 | answer plus the chunks it cites |
 | `GET /timeline?lecture_id=` | Person 2 | sections as `{title, start, end}` |
+
+`POST /upload` returns at once and transcribes in the background. Poll `GET /status` until it says `ready` before loading the transcript, timeline or search; on `failed`, show `error`.
 
 Person 1 hands over one hand-made transcript JSON right away, so Persons 2 and 3 can build against mock data.
 

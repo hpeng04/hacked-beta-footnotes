@@ -1,0 +1,199 @@
+<!doctype html>
+<!-- Standalone test page for the backend API. No build step: open this file in a
+     browser (or http://localhost:5173/test.html under `npm run dev`). -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TimeStamp API test</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 16px; }
+      fieldset { margin: 12px 0; }
+      input[type="text"] { padding: 4px; width: 260px; max-width: 100%; }
+      video { width: 100%; background: #000; aspect-ratio: 16 / 9; }
+      #timeline { display: flex; }
+      #timeline button { border: 0; color: #fff; padding: 6px 4px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      ul { padding-left: 18px; max-height: 300px; overflow: auto; }
+      .error { color: #c00; }
+    </style>
+  </head>
+  <body>
+    <h1>TimeStamp API test</h1>
+
+    <fieldset>
+      <legend>Setup</legend>
+      <label>API <input type="text" id="api" value="http://localhost:8000" /></label>
+      <label>Lecture
+        <input type="text" id="lecture" value="demo" list="lectures" />
+        <datalist id="lectures">
+          <option value="demo"></option>
+          <option value="bio-photosynthesis"></option>
+          <option value="ml-gradient-descent"></option>
+          <option value="os-scheduling"></option>
+        </datalist>
+      </label>
+      <button id="statusBtn">Status</button>
+      <span id="status" role="status"></span>
+    </fieldset>
+
+    <fieldset>
+      <legend>POST /upload</legend>
+      <input type="file" id="file" accept="video/*,audio/*" />
+      <span id="uploadMsg" role="status"></span>
+      <video id="video" controls></video>
+    </fieldset>
+
+    <fieldset>
+      <legend>GET /timeline</legend>
+      <button id="timelineBtn">Load</button>
+      <span id="timelineMsg"></span>
+      <div id="timeline"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>POST /ask</legend>
+      <form id="askForm">
+        <input type="text" id="question" placeholder="When did he explain deadlock?" />
+        <button>Ask</button>
+      </form>
+      <p id="answer"></p>
+      <ul id="sources"></ul>
+    </fieldset>
+
+    <fieldset>
+      <legend>GET /search</legend>
+      <form id="searchForm">
+        <input type="text" id="q" placeholder="deadlock" />
+        <button>Search</button>
+      </form>
+      <p id="searchMsg"></p>
+      <ul id="results"></ul>
+    </fieldset>
+
+    <fieldset>
+      <legend>GET /transcript</legend>
+      <button id="transcriptBtn">Load</button>
+      <span id="transcriptMsg"></span>
+      <ul id="transcript"></ul>
+    </fieldset>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#e15759", "#76b7b2"];
+      const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+      const api = () => $("api").value.replace(/\/+$/, "");
+      const lecture = () => encodeURIComponent($("lecture").value.trim());
+
+      async function request(path, options) {
+        const res = await fetch(api() + path, options);
+        if (!res.ok) {
+          const detail = await res.json().then((b) => b.detail, () => "");
+          throw new Error(`${res.status} ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
+        }
+        return res.json();
+      }
+
+      // Runs fn, showing "…" and then any error in the element `msg`.
+      async function run(msg, fn) {
+        const el = $(msg);
+        el.className = "";
+        el.textContent = "…";
+        try {
+          el.textContent = (await fn()) || "";
+        } catch (err) {
+          el.className = "error";
+          el.textContent = err.message;
+        }
+      }
+
+      function seek(seconds) {
+        const video = $("video");
+        if (!video.src) return;
+        video.currentTime = seconds;
+        video.play();
+      }
+
+      function renderChunks(listId, chunks) {
+        $(listId).replaceChildren(...chunks.map((c) => {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = "#";
+          a.textContent = `${fmt(c.start)}–${fmt(c.end)}`;
+          a.onclick = (e) => { e.preventDefault(); seek(c.start); };
+          li.append(a, " " + c.text);
+          return li;
+        }));
+      }
+
+      const loadStatus = () => run("status", async () => {
+        const s = await request(`/status?lecture_id=${lecture()}`);
+        return s.status + (s.error ? `: ${s.error}` : "");
+      });
+      $("statusBtn").onclick = loadStatus;
+
+      $("file").onchange = (e) => run("uploadMsg", async () => {
+        const file = e.target.files[0];
+        if (!file) return "";
+        const body = new FormData();
+        body.append("file", file);
+        const up = await request("/upload", { method: "POST", body });
+        $("lecture").value = up.lecture_id;
+        $("video").src = api() + up.video_url;
+        for (;;) { // the backend transcribes in the background: poll until it is done
+          const s = await request(`/status?lecture_id=${up.lecture_id}`);
+          if (s.status === "ready") return `Ready: ${up.lecture_id}`;
+          if (s.status === "failed") throw new Error(`Transcription failed: ${s.error || "unknown error"}`);
+          $("uploadMsg").textContent = `Transcribing ${up.lecture_id}…`;
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      });
+
+      $("timelineBtn").onclick = () => run("timelineMsg", async () => {
+        $("timeline").replaceChildren();
+        const sections = await request(`/timeline?lecture_id=${lecture()}`);
+        const total = Math.max(...sections.map((s) => s.end));
+        $("timeline").replaceChildren(...sections.map((s, i) => {
+          const b = document.createElement("button");
+          b.textContent = s.title;
+          b.title = `${s.title} (${fmt(s.start)}–${fmt(s.end)})`;
+          b.style.width = `${((s.end - s.start) / total) * 100}%`;
+          b.style.background = COLORS[i % COLORS.length];
+          b.onclick = () => seek(s.start);
+          return b;
+        }));
+        return `${sections.length} sections`;
+      });
+
+      $("askForm").onsubmit = (e) => {
+        e.preventDefault();
+        run("answer", async () => {
+          $("sources").replaceChildren();
+          const res = await request("/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lecture_id: $("lecture").value.trim(), question: $("question").value }),
+          });
+          renderChunks("sources", res.sources);
+          return res.answer;
+        });
+      };
+
+      $("searchForm").onsubmit = (e) => {
+        e.preventDefault();
+        run("searchMsg", async () => {
+          $("results").replaceChildren();
+          const chunks = await request(`/search?lecture_id=${lecture()}&q=${encodeURIComponent($("q").value)}`);
+          renderChunks("results", chunks);
+          return `${chunks.length} results`;
+        });
+      };
+
+      $("transcriptBtn").onclick = () => run("transcriptMsg", async () => {
+        $("transcript").replaceChildren();
+        const chunks = await request(`/transcript?lecture_id=${lecture()}`);
+        renderChunks("transcript", chunks);
+        return `${chunks.length} chunks`;
+      });
+    </script>
+  </body>
+</html>

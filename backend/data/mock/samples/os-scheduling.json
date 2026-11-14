@@ -1,0 +1,86 @@
+[
+  {
+    "lecture_id": "os-scheduling",
+    "start": 0.0,
+    "end": 31.2,
+    "text": "Okay, let's get started. Um, last week we finished deadlock, so today is CPU scheduling. The question is simple: when several processes are ready to run and there's one CPU, who goes next? The part of the kernel that answers that is called the scheduler, and the part that actually switches to the chosen process is the dispatcher."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 31.2,
+    "end": 59.6,
+    "text": "So why do we care? A few metrics. Throughput, how many jobs finish per unit of time. Turnaround time, from when a job arrives to when it completes. Waiting time, how long it sits in the ready queue. And response time, which matters for interactive stuff, that's the time until the first output. These metrics pull against each other, which is the whole difficulty."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 59.6,
+    "end": 93.3,
+    "text": "The simplest policy is first come first served, FCFS. It's just a FIFO queue. Easy to implement, no starvation. But look at this example: one job needs twenty-four milliseconds, then two jobs need three each. If the long one arrives first, average waiting time is seventeen. If the short ones go first, it's three. Huge difference."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 93.3,
+    "end": 123.2,
+    "text": "That problem has a name, the convoy effect. A bunch of short, I/O-bound processes get stuck behind one long CPU-bound process, like cars behind a truck on a one lane road. CPU utilization and device utilization both drop. So FCFS is fair in a naive sense, but it can be terrible on average."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 123.2,
+    "end": 153.8,
+    "text": "Next idea: shortest job first, SJF. Always run the job with the shortest next CPU burst. You can actually prove SJF is optimal for average waiting time, among non-preemptive policies. The catch, and it's a big catch, is that we don't know how long the next burst will be. The OS can't see the future."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 153.8,
+    "end": 181.6,
+    "text": "So we predict it. The standard trick is an exponential average. Next prediction equals alpha times the last actual burst plus one minus alpha times the last prediction. With alpha around one half, recent history and old history count about equally. It's cheap and works surprisingly well in practice."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 181.6,
+    "end": 213.7,
+    "text": "The preemptive version of SJF is called shortest remaining time first. If a new job arrives with a shorter burst than what's left of the running job, we kick the running job off. Better averages, but now long jobs can wait forever if short ones keep arriving. That's starvation, and we'll come back to it."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 213.7,
+    "end": 243.7,
+    "text": "Okay, round robin. This is what time sharing systems actually use. Each process gets a small time slice, called a quantum, maybe ten to a hundred milliseconds. When the quantum expires, a timer interrupt fires, the process goes to the back of the ready queue, and the next one runs. Nobody waits more than n minus one quanta."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 243.7,
+    "end": 278.1,
+    "text": "Choosing the quantum is the key design decision. Too large and round robin degenerates into FCFS. Too small and you spend all your time context switching, saving and restoring registers, flushing caches. The rule of thumb is that about eighty percent of CPU bursts should finish within one quantum."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 278.1,
+    "end": 307.0,
+    "text": "Priority scheduling generalizes all of this. Each process has a priority number and the highest priority runs. SJF is just priority where the priority is the predicted burst. The problem, again, is starvation. Rumor has it that when they shut down an old IBM machine at MIT in 1973 they found a low priority job submitted in 1967 that had never run."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 307.0,
+    "end": 338.5,
+    "text": "The fix for starvation is aging. You gradually raise the priority of processes that have been waiting a long time. Eventually even the lowest priority job becomes the highest priority and gets to run. Simple, and it guarantees progress."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 338.5,
+    "end": 367.8,
+    "text": "Real systems combine these with a multilevel feedback queue. Several queues with different priorities and different quanta. New processes start at the top. If a process uses its whole quantum, it's probably CPU bound, so it moves down a level. If it gives up the CPU early for I/O, it stays high. Interactive jobs naturally float to the top."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 367.8,
+    "end": 398.6,
+    "text": "Um, quick note on Linux. Linux used the completely fair scheduler for a long time, which tracks virtual runtime in a red black tree and always picks the task that has run the least. Newer kernels replaced it with EEVDF, earliest eligible virtual deadline first, but the fairness idea is the same."
+  },
+  {
+    "lecture_id": "os-scheduling",
+    "start": 398.6,
+    "end": 431.6,
+    "text": "Alright, that's it for today. For homework, do the scheduling simulation in problem set four, compare FCFS, SJF, and round robin with quanta of four and ten. Midterm is two weeks from Friday and covers everything through scheduling. See you Thursday."
+  }
+]
